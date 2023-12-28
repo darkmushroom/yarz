@@ -6,6 +6,7 @@
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 
+SDL_Surface* loadSpritemap(const char *, SDL_Surface *);
 void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
@@ -25,10 +26,10 @@ int main(int argc, char *args[])
     }
 
     /*
-    * I plan to only load PNG images. However, the image engine can return 0 or more available image formats.
+    * I plan to only load PNG images. However, the image library can return 0 or more available image formats.
     * This mask ensures at least one of those formats is PNG.
     * 
-    * For example, let's say we ask for PNG to be loaded but only JPG and TIFF are available
+    * For example, let's say we ask for PNG (2) to be loaded but only JPG and TIFF are available
     * JPG is 1, TIFF is 4, so IMG_Init will return 5 (0b00000101)
     * 0b00000101 - imgFlags
     * 0b00000010 - png format
@@ -48,17 +49,31 @@ int main(int argc, char *args[])
     // holy shit. Everything is initialized. Let's /do/ something with it
     screenSurface = SDL_GetWindowSurface(window);
 
-    // FIXME: don't assume spriteMap loaded correctly
-    SDL_Surface* spriteMap = IMG_Load("assets/yarz-sprites.png");
-    SDL_BlitSurface(spriteMap, NULL, screenSurface, NULL);
+    SDL_Surface* spritemap = loadSpritemap("assets/yarzz-sprites.png", screenSurface);
+
+    SDL_BlitSurface(spritemap, NULL, screenSurface, NULL);
     printf(SDL_GetError());
     SDL_UpdateWindowSurface(window);
 
     SDL_Event e; bool quit = false; while( quit == false ){ while( SDL_PollEvent( &e ) ){ if( e.type == SDL_QUIT ) quit = true; } }
 
-    SDL_FreeSurface(spriteMap);
+    SDL_FreeSurface(spritemap);
     cleanup(window);
     return 0;
+}
+
+SDL_Surface* loadSpritemap(const char *path, SDL_Surface *screenSurface) {
+    SDL_Surface* spritemap = IMG_Load(path);
+    if (spritemap == NULL) {
+        printf("Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
+    }
+    SDL_Surface* optimizedSurface = SDL_ConvertSurface(spritemap, screenSurface->format, 0);
+    if(optimizedSurface == NULL) {
+        printf("Unable to optimize image %s! SDL Error: %s\n", path, SDL_GetError());
+    }
+
+    SDL_FreeSurface(spritemap);
+    return optimizedSurface;
 }
 
 void cleanup (struct SDL_Window *window)
