@@ -6,7 +6,7 @@ INCLUDE_PATHS = -IC:\MinGW_external_libs\SDL2-2.28.5\include\SDL2 -IC:\MinGW_ext
 
 LIBRARY_PATHS = -LC:\MinGW_external_libs\SDL2-2.28.5\lib -LC:\MinGW_external_libs\SDL2_Image-2.8.1\lib
 
-COMPILER_FLAGS = -g
+COMPILER_FLAGS =
 
 # compiler flags for release: -w -Wl,-subsystem,windows
 

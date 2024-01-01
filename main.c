@@ -11,7 +11,10 @@ const int TILE_SIZE = 32;
 const int HERO = 0;
 const int ENEMY1 = 1;
 
+bool initSDL2(SDL_Window *);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
+SDL_Window* initWindow(SDL_Window *);
+bool initImageEngine(SDL_Window *);
 void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
@@ -19,39 +22,10 @@ int main(int argc, char *args[])
     SDL_Window *window = NULL;
     SDL_Surface *screenSurface = NULL;
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        printf("SDL not initialized! SDL_Error: %s\n", SDL_GetError());
-        cleanup(window);
-    }
+    if (initSDL2(window) == false) return 0;              //if SDL doesn't start, bail
+    if ((window = initWindow(window)) == NULL) return 0;  //if we can't create a window, bail
+    if (initImageEngine(window) == false) return 0;       //if we can't load PNG, bail
 
-    window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-    if (window == NULL) {
-        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
-        cleanup(window);
-    }
-
-    /*
-    * I plan to only load PNG images. However, the image library can return 0 or more available image formats.
-    * This mask ensures at least one of those formats is PNG.
-    * 
-    * For example, let's say we ask for PNG (2) to be loaded but only JPG and TIFF are available
-    * JPG is 1, TIFF is 4, so IMG_Init will return 5 (0b00000101)
-    * 0b00000101 - imgFlags
-    * 0b00000010 - png format
-    * ========== AND
-    * 0b00000000
-    * 
-    * We invert this result so if no image formats are available (0) or none of them are suitable, 
-    * the if statement runs our error code. Otherwise we fall through to loading our assets
-    */
-    int imgFlags = IMG_Init(IMG_INIT_PNG);
-
-    if (!(imgFlags & IMG_INIT_PNG)) {
-        printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
-        cleanup(window);
-    }
-
-    // holy shit. Everything is initialized. Let's /do/ something with it
     screenSurface = SDL_GetWindowSurface(window);
 
     // pass in screen format to correctly optimize spritemap
@@ -93,6 +67,54 @@ int main(int argc, char *args[])
     cleanup(window);
     return 0;
 }
+
+bool initSDL2(SDL_Window *window) {
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        printf("SDL not initialized! SDL_Error: %s\n", SDL_GetError());
+        cleanup(window);
+        return false;
+    }
+
+    return true;
+}
+
+SDL_Window* initWindow(SDL_Window *window) {
+    window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    if (window == NULL) {
+        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        cleanup(window);
+        return NULL;
+    }
+
+    return window;
+}
+
+/*
+* I plan to only load PNG images. However, the image library can return 0 or more available image formats.
+* This mask ensures at least one of those formats is PNG.
+*
+* For example, let's say we ask for PNG (2) to be loaded but only JPG and TIFF are available
+* JPG is 1, TIFF is 4, so IMG_Init will return 5 (0b00000101)
+* 0b00000101 - imgFlags
+* 0b00000010 - png format
+* ========== AND
+* 0b00000000
+*
+* We invert this result so if no image formats are available (0) or none of them are suitable,
+* the if statement runs our error code. Otherwise we fall through to loading our assets
+*/
+bool initImageEngine(SDL_Window *window) {
+    int imgFlags = IMG_Init(IMG_INIT_PNG);
+
+    if (!(imgFlags & IMG_INIT_PNG)) {
+        printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
+        cleanup(window);
+        return false;
+    }
+
+    return true;
+}
+
 
 SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
     SDL_Surface* spritemap = IMG_Load(path);
