@@ -34,13 +34,34 @@ int main(int argc, char *args[])
     SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
 
     SDL_Event e;
+    int enemyx = 64;
+    int enemyy = 64;
     while (true) {
         SDL_PollEvent(&e);
         if (e.type == SDL_QUIT) {
             break;
         }
+        if (e.type == SDL_KEYDOWN) {
+            switch(e.key.keysym.sym) {
+                case SDLK_UP:
+                enemyy -= 32;
+                break;
+
+                case SDLK_DOWN:
+                enemyy += 32;
+                break;
+
+                case SDLK_LEFT:
+                enemyx -= 32;
+                break;
+
+                case SDLK_RIGHT:
+                enemyx += 32;
+                break;
+            }
+        }
         place(spritemap, HERO, 320, 240, screenSurface);
-        place(spritemap, ENEMY1, 64, 64, screenSurface);
+        place(spritemap, ENEMY1, enemyx, enemyy, screenSurface);
         SDL_UpdateWindowSurface(window);
     }
 
