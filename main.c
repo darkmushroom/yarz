@@ -33,11 +33,16 @@ int main(int argc, char *args[])
     // pass in screen format to correctly optimize spritemap
     SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
 
-    place(spritemap, HERO, 320, 240, screenSurface);
-    place(spritemap, ENEMY1, 64, 64, screenSurface);
-    SDL_UpdateWindowSurface(window);
-
-    SDL_Event e; bool quit = false; while( quit == false ){ while( SDL_PollEvent( &e ) ){ if( e.type == SDL_QUIT ) quit = true; } }
+    SDL_Event e;
+    while (true) {
+        SDL_PollEvent(&e);
+        if (e.type == SDL_QUIT) {
+            break;
+        }
+        place(spritemap, HERO, 320, 240, screenSurface);
+        place(spritemap, ENEMY1, 64, 64, screenSurface);
+        SDL_UpdateWindowSurface(window);
+    }
 
     SDL_FreeSurface(spritemap);
     cleanup(window); // screenSurface also gets freed here, see SDL_DestroyWindow
