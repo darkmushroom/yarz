@@ -17,55 +17,40 @@ SDL_Window* initWindow(SDL_Window *);
 bool initImageEngine(SDL_Window *);
 void cleanup(SDL_Window *);
 
+void place(SDL_Surface *, int, int, int, SDL_Surface *);
+
 int main(int argc, char *args[])
 {
     SDL_Window *window = NULL;
     SDL_Surface *screenSurface = NULL;
 
-    if (initSDL2(window) == false) return 0;              //if SDL doesn't start, bail
-    if ((window = initWindow(window)) == NULL) return 0;  //if we can't create a window, bail
-    if (initImageEngine(window) == false) return 0;       //if we can't load PNG, bail
+    if (initSDL2(window) == false) return EXIT_FAILURE;              //if SDL doesn't start, bail
+    if ((window = initWindow(window)) == NULL) return EXIT_FAILURE;  //if we can't create a window, bail
+    if (initImageEngine(window) == false) return EXIT_FAILURE;       //if we can't load PNG, bail
 
     screenSurface = SDL_GetWindowSurface(window);
 
     // pass in screen format to correctly optimize spritemap
     SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
 
-    SDL_Rect hero;
-    hero.h = TILE_SIZE;
-    hero.w = TILE_SIZE;
-    hero.x = 0;
-    hero.y = 0;
-
-    SDL_Rect enemy;
-    enemy.h = TILE_SIZE;
-    enemy.w = TILE_SIZE;
-    enemy.x = 0;
-    enemy.y = 32;
-
-    SDL_Rect heroLocation;
-    heroLocation.w = 0;
-    heroLocation.h = 0;
-    heroLocation.x = 320;
-    heroLocation.y = 240;
-
-    SDL_Rect enemyLocation;
-    enemyLocation.w = 0;
-    enemyLocation.h = 0;
-    enemyLocation.x = 0;
-    enemyLocation.y = 0;
-
-    SDL_BlitSurface(spritemap, &hero, screenSurface, &heroLocation);
-    SDL_BlitSurface(spritemap, &enemy, screenSurface, &enemyLocation);
-    
-    printf(SDL_GetError());
+    place(spritemap, HERO, 320, 240, screenSurface);
+    place(spritemap, ENEMY1, 64, 64, screenSurface);
     SDL_UpdateWindowSurface(window);
 
     SDL_Event e; bool quit = false; while( quit == false ){ while( SDL_PollEvent( &e ) ){ if( e.type == SDL_QUIT ) quit = true; } }
 
     SDL_FreeSurface(spritemap);
-    cleanup(window);
-    return 0;
+    cleanup(window); // screenSurface also gets freed here, see SDL_DestroyWindow
+    return EXIT_SUCCESS;
+}
+
+void place(SDL_Surface *src, int sprite, int x, int y, SDL_Surface *dst) {
+
+    SDL_Rect srcRect = {.h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite * 32};
+    SDL_Rect dstRect = {.h = 0, .w = 0, .x = x, .y = y};
+
+    SDL_BlitSurface(src, &srcRect, dst, &dstRect);
+    return;
 }
 
 bool initSDL2(SDL_Window *window) {
