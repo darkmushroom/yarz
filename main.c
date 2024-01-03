@@ -25,7 +25,8 @@ SDL_Window* initWindow(SDL_Window *);
 bool initImageEngine(SDL_Window *);
 void cleanup(SDL_Window *);
 
-void placeTile(SDL_Surface *, int, int, int, SDL_Surface *);
+void generateTerrain(SDL_Surface *, SDL_Surface *);
+void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
 
 int main(int argc, char *args[])
@@ -39,10 +40,11 @@ int main(int argc, char *args[])
 
     screenSurface = SDL_GetWindowSurface(window);
 
-    SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
     // FIXME: may want to remap alpha color to something other than black
-    SDL_SetColorKey(spritemap, SDL_TRUE, SDL_MapRGB(spritemap->format, 0, 0, 0)); 
+    SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
+    SDL_SetColorKey(spritemap, SDL_TRUE, SDL_MapRGB(spritemap->format, 0, 0, 0));
     SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", screenSurface->format);
+    SDL_SetColorKey(terrainmap, SDL_TRUE, SDL_MapRGB(terrainmap->format, 0, 0, 0));
 
     struct Critter hero = {.srcSpritemap = spritemap, .spriteID = HERO, .x = 0, .y = 0 };
     struct Critter enemy1 = {.srcSpritemap = spritemap, .spriteID = ENEMY1, .x = 32, .y = 32 };
@@ -72,12 +74,8 @@ int main(int argc, char *args[])
                 break;
             }
         }
-        for (int i = 0; i < 11; i++) {
-            for (int j = 0; j < 11; j++) {
-                placeTile(terrainmap, FLOOR, i * 32, j * 32, screenSurface);
-            }
-        }
 
+        generateTerrain(terrainmap, screenSurface);
         place(hero, screenSurface);
         place(enemy1, screenSurface);
         SDL_UpdateWindowSurface(window);
@@ -89,6 +87,39 @@ int main(int argc, char *args[])
     return EXIT_SUCCESS;
 }
 
+// currently just makes a room with four walls
+void generateTerrain(SDL_Surface *terrainmap, SDL_Surface *dst) {
+    enum tileset {
+        FLOOR,
+        WALLS
+    };
+    enum wall {
+        NORTH,
+        SOUTH,
+        EAST,
+        WEST
+    };
+    for (int i = 0; i < SCREEN_WIDTH; i += 32) {
+        for (int j = 0; j < SCREEN_HEIGHT; j += 32) {
+            placeTile(terrainmap, FLOOR, FLOOR, i, j, dst);
+            if (j == 0) { //top of map
+                placeTile(terrainmap, WALLS, NORTH, i, j, dst);
+            }
+            if (i == 0) { //left of map
+                placeTile(terrainmap, WALLS, WEST, i, j, dst);
+            }
+            if (i == SCREEN_WIDTH - 32) { //right of map
+                placeTile(terrainmap, WALLS, EAST, i, j, dst);
+            }
+            if (j == SCREEN_HEIGHT - 32) { //bottom of map
+                placeTile(terrainmap, WALLS, SOUTH, i, j, dst);
+            }
+        }
+    }
+
+
+}
+
 void place(struct Critter sprite, SDL_Surface *dst) {
     SDL_Rect srcRect = { .h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite.spriteID * 32 };
     SDL_Rect dstRect = { .h = 0, .w = 0, .x = sprite.x, .y = sprite.y };
@@ -97,9 +128,9 @@ void place(struct Critter sprite, SDL_Surface *dst) {
 
 }
 
-void placeTile(SDL_Surface *src, int sprite, int x, int y, SDL_Surface *dst) {
+void placeTile(SDL_Surface *src, int sprite, int offset, int x, int y, SDL_Surface *dst) {
 
-    SDL_Rect srcRect = {.h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite * 32};
+    SDL_Rect srcRect = {.h = TILE_SIZE, .w = TILE_SIZE, .x = offset * 32, .y = sprite * 32};
     SDL_Rect dstRect = {.h = 0, .w = 0, .x = x, .y = y};
 
     SDL_BlitSurface(src, &srcRect, dst, &dstRect);
