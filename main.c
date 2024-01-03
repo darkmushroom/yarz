@@ -12,13 +12,21 @@ const int HERO = 0;
 const int ENEMY1 = 1;
 const int FLOOR = 0;
 
+struct Critter {
+    SDL_Surface *srcSpritemap;
+    int spriteID;
+    int x;
+    int y;
+};
+
 bool initSDL2(SDL_Window *);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
 SDL_Window* initWindow(SDL_Window *);
 bool initImageEngine(SDL_Window *);
 void cleanup(SDL_Window *);
 
-void place(SDL_Surface *, int, int, int, SDL_Surface *);
+void placeTile(SDL_Surface *, int, int, int, SDL_Surface *);
+void place(struct Critter, SDL_Surface *);
 
 int main(int argc, char *args[])
 {
@@ -31,14 +39,15 @@ int main(int argc, char *args[])
 
     screenSurface = SDL_GetWindowSurface(window);
 
-    // pass in screen format to correctly optimize spritemap
     SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
-    SDL_SetColorKey(spritemap, SDL_TRUE, SDL_MapRGB(spritemap->format, 0, 0, 0));
+    // FIXME: may want to remap alpha color to something other than black
+    SDL_SetColorKey(spritemap, SDL_TRUE, SDL_MapRGB(spritemap->format, 0, 0, 0)); 
     SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", screenSurface->format);
 
+    struct Critter hero = {.srcSpritemap = spritemap, .spriteID = HERO, .x = 0, .y = 0 };
+    struct Critter enemy1 = {.srcSpritemap = spritemap, .spriteID = ENEMY1, .x = 32, .y = 32 };
+
     SDL_Event e;
-    int enemyx = 64;
-    int enemyy = 64;
     while (true) {
         SDL_PollEvent(&e);
         if (e.type == SDL_QUIT) {
@@ -47,30 +56,30 @@ int main(int argc, char *args[])
         if (e.type == SDL_KEYDOWN) {
             switch(e.key.keysym.sym) {
                 case SDLK_UP:
-                enemyy -= 32;
+                enemy1.y -= 32;
                 break;
 
                 case SDLK_DOWN:
-                enemyy += 32;
+                enemy1.y += 32;
                 break;
 
                 case SDLK_LEFT:
-                enemyx -= 32;
+                enemy1.x -= 32;
                 break;
 
                 case SDLK_RIGHT:
-                enemyx += 32;
+                enemy1.x += 32;
                 break;
             }
         }
         for (int i = 0; i < 11; i++) {
             for (int j = 0; j < 11; j++) {
-                place(terrainmap, FLOOR, i * 32, j * 32, screenSurface);
+                placeTile(terrainmap, FLOOR, i * 32, j * 32, screenSurface);
             }
         }
 
-        place(spritemap, HERO, 320, 240, screenSurface);
-        place(spritemap, ENEMY1, enemyx, enemyy, screenSurface);
+        place(hero, screenSurface);
+        place(enemy1, screenSurface);
         SDL_UpdateWindowSurface(window);
     }
 
@@ -80,7 +89,15 @@ int main(int argc, char *args[])
     return EXIT_SUCCESS;
 }
 
-void place(SDL_Surface *src, int sprite, int x, int y, SDL_Surface *dst) {
+void place(struct Critter sprite, SDL_Surface *dst) {
+    SDL_Rect srcRect = { .h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite.spriteID * 32 };
+    SDL_Rect dstRect = { .h = 0, .w = 0, .x = sprite.x, .y = sprite.y };
+
+    SDL_BlitSurface(sprite.srcSpritemap, &srcRect, dst, &dstRect);
+
+}
+
+void placeTile(SDL_Surface *src, int sprite, int x, int y, SDL_Surface *dst) {
 
     SDL_Rect srcRect = {.h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite * 32};
     SDL_Rect dstRect = {.h = 0, .w = 0, .x = x, .y = y};
@@ -136,7 +153,7 @@ bool initImageEngine(SDL_Window *window) {
     return true;
 }
 
-
+// pass in screen format to correctly optimize spritemap
 SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
     SDL_Surface* spritemap = IMG_Load(path);
     if (spritemap == NULL) {
