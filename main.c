@@ -10,6 +10,7 @@ const int TILE_SIZE = 32;
 
 const int HERO = 0;
 const int ENEMY1 = 1;
+const int FLOOR = 0;
 
 bool initSDL2(SDL_Window *);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
@@ -32,6 +33,8 @@ int main(int argc, char *args[])
 
     // pass in screen format to correctly optimize spritemap
     SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
+    SDL_SetColorKey(spritemap, SDL_TRUE, SDL_MapRGB(spritemap->format, 0, 0, 0));
+    SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", screenSurface->format);
 
     SDL_Event e;
     int enemyx = 64;
@@ -60,12 +63,19 @@ int main(int argc, char *args[])
                 break;
             }
         }
+        for (int i = 0; i < 11; i++) {
+            for (int j = 0; j < 11; j++) {
+                place(terrainmap, FLOOR, i * 32, j * 32, screenSurface);
+            }
+        }
+
         place(spritemap, HERO, 320, 240, screenSurface);
         place(spritemap, ENEMY1, enemyx, enemyy, screenSurface);
         SDL_UpdateWindowSurface(window);
     }
 
     SDL_FreeSurface(spritemap);
+    SDL_FreeSurface(terrainmap);
     cleanup(window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
 }
