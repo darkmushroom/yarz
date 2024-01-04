@@ -12,6 +12,11 @@ const int HERO = 0;
 const int ENEMY1 = 1;
 const int FLOOR = 0;
 
+struct RenderTarget {
+    SDL_Window *window;
+    SDL_Surface *screenSurface;
+};
+
 struct Critter {
     SDL_Surface *srcSpritemap;
     int spriteID;
@@ -19,32 +24,36 @@ struct Critter {
     int y;
 };
 
+enum gameState {
+    EXITING,
+    INIT,
+    NEW_GAME,
+    PLAY,
+    GAME_OVER
+};
+
+int gameState = 1;
+
+struct RenderTarget init();
 bool initSDL2(SDL_Window *);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
 SDL_Window* initWindow(SDL_Window *);
 bool initImageEngine(SDL_Window *);
 void cleanup(SDL_Window *);
-
 void generateTerrain(SDL_Surface *, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
 
 int main(int argc, char *args[])
 {
-    SDL_Window *window = NULL;
-    SDL_Surface *screenSurface = NULL;
+    gameState = INIT;
 
-    if (initSDL2(window) == false) return EXIT_FAILURE;              //if SDL doesn't start, bail
-    if ((window = initWindow(window)) == NULL) return EXIT_FAILURE;  //if we can't create a window, bail
-    if (initImageEngine(window) == false) return EXIT_FAILURE;       //if we can't load PNG, bail
-
-    screenSurface = SDL_GetWindowSurface(window);
+    struct RenderTarget renderTarget = init();
+    if (renderTarget.screenSurface == NULL || renderTarget.window == NULL) return EXIT_FAILURE;
 
     // FIXME: may want to remap alpha color to something other than black
-    SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", screenSurface->format);
-    SDL_SetColorKey(spritemap, SDL_TRUE, SDL_MapRGB(spritemap->format, 0, 0, 0));
-    SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", screenSurface->format);
-    SDL_SetColorKey(terrainmap, SDL_TRUE, SDL_MapRGB(terrainmap->format, 0, 0, 0));
+    SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", renderTarget.screenSurface->format);
+    SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", renderTarget.screenSurface->format);
 
     struct Critter hero = {.srcSpritemap = spritemap, .spriteID = HERO, .x = 0, .y = 0 };
     struct Critter enemy1 = {.srcSpritemap = spritemap, .spriteID = ENEMY1, .x = 32, .y = 32 };
@@ -75,15 +84,15 @@ int main(int argc, char *args[])
             }
         }
 
-        generateTerrain(terrainmap, screenSurface);
-        place(hero, screenSurface);
-        place(enemy1, screenSurface);
-        SDL_UpdateWindowSurface(window);
+        generateTerrain(terrainmap, renderTarget.screenSurface);
+        place(hero, renderTarget.screenSurface);
+        place(enemy1, renderTarget.screenSurface);
+        SDL_UpdateWindowSurface(renderTarget.window);
     }
 
     SDL_FreeSurface(spritemap);
     SDL_FreeSurface(terrainmap);
-    cleanup(window); // screenSurface also gets freed here, see SDL_DestroyWindow
+    cleanup(renderTarget.window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
 }
 
@@ -116,8 +125,6 @@ void generateTerrain(SDL_Surface *terrainmap, SDL_Surface *dst) {
             }
         }
     }
-
-
 }
 
 void place(struct Critter sprite, SDL_Surface *dst) {
@@ -137,65 +144,46 @@ void placeTile(SDL_Surface *src, int sprite, int offset, int x, int y, SDL_Surfa
     return;
 }
 
-bool initSDL2(SDL_Window *window) {
+struct RenderTarget init() {
+    SDL_Window *window = NULL;
+    struct RenderTarget tempRenderTarget = { .screenSurface = NULL, .window = NULL };
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL not initialized! SDL_Error: %s\n", SDL_GetError());
         cleanup(window);
-        return false;
+        return tempRenderTarget;
     }
 
-    return true;
-}
-
-SDL_Window* initWindow(SDL_Window *window) {
     window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         cleanup(window);
-        return NULL;
+        return tempRenderTarget;
     }
 
-    return window;
-}
-
-/*
-* I plan to only load PNG images. However, the image library can return 0 or more available image formats.
-* This mask ensures at least one of those formats is PNG.
-*
-* For example, let's say we ask for PNG (2) to be loaded but only JPG and TIFF are available
-* JPG is 1, TIFF is 4, so IMG_Init will return 5 (0b00000101)
-* 0b00000101 - imgFlags
-* 0b00000010 - png format
-* ========== AND
-* 0b00000000
-*
-* We invert this result so if no image formats are available (0) or none of them are suitable,
-* the if statement runs our error code. Otherwise we fall through to loading our assets
-*/
-bool initImageEngine(SDL_Window *window) {
     int imgFlags = IMG_Init(IMG_INIT_PNG);
-
     if (!(imgFlags & IMG_INIT_PNG)) {
         printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
         cleanup(window);
-        return false;
+        return tempRenderTarget;
     }
 
-    return true;
+    tempRenderTarget.window = window;
+    tempRenderTarget.screenSurface = SDL_GetWindowSurface(window);
+    return tempRenderTarget;
 }
 
-// pass in screen format to correctly optimize spritemap
 SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
-    SDL_Surface* spritemap = IMG_Load(path);
-    if (spritemap == NULL) {
+    SDL_Surface* image = IMG_Load(path);
+    if (image == NULL) {
         printf("Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
     }
-    SDL_Surface* optimizedSurface = SDL_ConvertSurface(spritemap, pixelFormat, 0);
+    SDL_Surface* optimizedSurface = SDL_ConvertSurface(image, pixelFormat, 0);
     if(optimizedSurface == NULL) {
         printf("Unable to optimize image %s! SDL Error: %s\n", path, SDL_GetError());
     }
 
-    SDL_FreeSurface(spritemap);
+    SDL_FreeSurface(image);
+    SDL_SetColorKey(optimizedSurface, SDL_TRUE, SDL_MapRGB(optimizedSurface->format, 0, 0, 0));
     return optimizedSurface;
 }
 
