@@ -28,11 +28,27 @@ enum gameState {
     EXITING,
     INIT,
     NEW_GAME,
-    PLAY,
+    PLAYER_TURN,
+    HERO_TURN,
     GAME_OVER
 };
 
-int gameState = 1;
+enum directions {
+    NONE,
+    NORTHWEST,
+    NORTH,
+    NORTHEAST,
+    EAST,
+    SOUTHEAST,
+    SOUTH,
+    SOUTHWEST,
+    WEST,
+    SKIP
+};
+
+int lastDirection = NONE;
+bool endTurn = false;
+int gameState = INIT;
 
 struct RenderTarget init();
 bool initSDL2(SDL_Window *);
@@ -42,6 +58,7 @@ bool initImageEngine(SDL_Window *);
 void generateTerrain(SDL_Surface *, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
+void processInputs(SDL_Event *);
 void gameLogic(struct Critter *, struct Critter **, int);
 void cleanup(SDL_Window *);
 
@@ -64,13 +81,9 @@ int main(int argc, char *args[])
     struct Critter *enemyList[] = {&leggy, &leggy2};
 
     SDL_Event e;
-    while (true) {
-
-        // hack to watch for a user requested quit without depleting the event queue
-        // TODO: All events, including gracefully closing the game, should probably be handled in the same place
-        SDL_PumpEvents();
-        if (SDL_PeepEvents(&e, 1, SDL_GETEVENT, SDL_QUIT, SDL_QUIT) == 1) break;
-
+    gameState = PLAYER_TURN;
+    while (gameState != EXITING) {
+        processInputs(&e);
         gameLogic(&hero, enemyList, 2);
 
         generateTerrain(terrainmap, renderTarget.screenSurface);
@@ -88,84 +101,114 @@ int main(int argc, char *args[])
 }
 
 void gameLogic(struct Critter *hero, struct Critter *enemyList[], int totalEntities) {
-    gameState = PLAY;
 
-    //handle hero logic
-    if (hero->x < enemyList[0]->x) {
+    if (gameState == HERO_TURN) {
         hero->x += TILE_SIZE;
-    }
-    else {
-        hero->x -= TILE_SIZE;
-    }
-    if (hero->y < enemyList[0]->y) {
-        hero->y += TILE_SIZE;
-    }
-    else {
-        hero->y -= TILE_SIZE;
+        gameState = PLAYER_TURN;
     }
 
-    //handle enemy logic
-        SDL_Event e;
-        bool input_received = false;
-        while(input_received == false) {
-            SDL_PollEvent(&e);
-            if (e.type == SDL_KEYDOWN) {
-                switch(e.key.keysym.sym) {
-                    case SDLK_UP:
-                    enemyList[0]->y -= 32;
-                    input_received = true;
-                    break;
+    if (endTurn == true){
+        switch (lastDirection) {
+            case SOUTHWEST:
+            enemyList[0]->x -= TILE_SIZE;
+            enemyList[0]->y += TILE_SIZE;
+            break;
 
-                    case SDLK_DOWN:
-                    enemyList[0]->y += 32;
-                    input_received = true;
-                    break;
+            case SOUTH:
+            enemyList[0]->x -= TILE_SIZE;
+            break;
 
-                    case SDLK_LEFT:
-                    enemyList[0]->x -= 32;
-                    input_received = true;
-                    break;
+            case SOUTHEAST:
+            enemyList[0]->x += TILE_SIZE;
+            enemyList[0]->y += TILE_SIZE;
+            break;
 
-                    case SDLK_RIGHT:
-                    enemyList[0]->x += 32;
-                    input_received = true;
-                    break;
-                }
-            }
+            case EAST:
+            enemyList[0]->x += TILE_SIZE;
+            break;
+
+            case NORTHEAST:
+            enemyList[0]->x += TILE_SIZE;
+            enemyList[0]->y -= TILE_SIZE;
+            break;
+
+            case NORTH:
+            enemyList[0]->y -= TILE_SIZE;
+            break;
+
+            case NORTHWEST:
+            enemyList[0]->x -= TILE_SIZE;
+            enemyList[0]->y -= TILE_SIZE;
+            break;
+
+            case WEST:
+            enemyList[0]->x -= TILE_SIZE;
+            break;
         }
+
+        lastDirection = NONE;
+        endTurn = false;
+        gameState = HERO_TURN;
+    }
+
     return;
 }
 
-/*
-void handleEvents() {
-    SDL_Event e;
-    while (true) {
-        SDL_PollEvent(&e);
-        if (e.type == SDL_QUIT) {
-            break;
+void processInputs(SDL_Event *e) {
+    while (SDL_PollEvent(e)) {
+        if (e->type == SDL_QUIT) {
+            gameState = EXITING;
+            return;
         }
-        if (e.type == SDL_KEYDOWN) {
-            switch(e.key.keysym.sym) {
-                case SDLK_UP:
-                enemy1.y -= 32;
+        if (e->type == SDL_KEYDOWN) {
+            switch (e->key.keysym.sym) {
+                case SDLK_KP_1:
+                lastDirection = SOUTHWEST;
                 break;
 
-                case SDLK_DOWN:
-                enemy1.y += 32;
+                case SDLK_KP_2:
+                lastDirection = SOUTH;
                 break;
 
-                case SDLK_LEFT:
-                enemy1.x -= 32;
+                case SDLK_KP_3:
+                lastDirection = SOUTHEAST;
                 break;
 
-                case SDLK_RIGHT:
-                enemy1.x += 32;
+                case SDLK_KP_4:
+                lastDirection = WEST;
+                break;
+
+                case SDLK_KP_5:
+                lastDirection = SKIP;
+                endTurn = true;
+                break;
+
+                case SDLK_KP_6:
+                lastDirection = EAST;
+                break;
+
+                case SDLK_KP_7:
+                lastDirection = NORTHWEST;
+                break;
+
+                case SDLK_KP_8:
+                lastDirection = NORTH;
+                break;
+
+                case SDLK_KP_9:
+                lastDirection = NORTHEAST;
+                break;
+
+                case SDLK_KP_ENTER:
+                endTurn = true;
                 break;
             }
         }
     }
+
+    return;
 }
- */
+
 // currently just makes a room with four walls
 void generateTerrain(SDL_Surface *terrainmap, SDL_Surface *dst) {
     enum tileset {
@@ -180,7 +223,7 @@ void generateTerrain(SDL_Surface *terrainmap, SDL_Surface *dst) {
     };
     for (int i = 0; i < SCREEN_WIDTH; i += 32) {
         for (int j = 0; j < SCREEN_HEIGHT; j += 32) {
-            placeTile(terrainmap, FLOOR, FLOOR, i, j, dst);
+            placeTile(terrainmap, FLOOR, 0, i, j, dst);
             if (j == 0) { //top of map
                 placeTile(terrainmap, WALLS, NORTH, i, j, dst);
             }
