@@ -4,6 +4,13 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+
+/* TODO: ideally all of this will be dynamic.
+ * Dynamically sized levels and a dynamically resized screen
+ */
+const int LEVEL_WIDTH = 1920;
+const int LEVEL_HEIGHT = 1440;
+
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 const int TILE_SIZE = 32;
@@ -49,6 +56,7 @@ enum directions {
 int lastDirection = NONE;
 bool endTurn = false;
 int gameState = INIT;
+int currentPlayer = 0; // FIXME: this is just a hack to get directional icons working
 
 struct RenderTarget init();
 bool initSDL2(SDL_Window *);
@@ -60,6 +68,7 @@ void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
 void processInputs(SDL_Event *);
 void gameLogic(struct Critter *, struct Critter **, int);
+void renderDirectionIcon(SDL_Surface *, struct Critter **, SDL_Surface *);
 void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
@@ -69,10 +78,11 @@ int main(int argc, char *args[])
     struct RenderTarget renderTarget = init();
     if (renderTarget.screenSurface == NULL || renderTarget.window == NULL) return EXIT_FAILURE;
 
-    // FIXME: may want to remap alpha color to something other than black
+    // TODO: may want to remap alpha color to something other than black
     // FIXME: doesn't check to make sure files are there
     SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", renderTarget.screenSurface->format);
     SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", renderTarget.screenSurface->format);
+    SDL_Surface *iconmap = loadSpritemap("assets/yarz-icons.png", renderTarget.screenSurface->format);
 
     struct Critter hero = {.srcSpritemap = spritemap, .spriteID = HERO, .x = 0, .y = 0 };
     struct Critter leggy = {.srcSpritemap = spritemap, .spriteID = LEGGY, .x = 128, .y = 128 };
@@ -87,6 +97,7 @@ int main(int argc, char *args[])
         gameLogic(&hero, enemyList, 2);
 
         generateTerrain(terrainmap, renderTarget.screenSurface);
+        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(iconmap, enemyList, renderTarget.screenSurface);
         place(hero, renderTarget.screenSurface);
         place(leggy, renderTarget.screenSurface);
         place(leggy2, renderTarget.screenSurface); // FIXME: lazy enemy copy
@@ -98,6 +109,44 @@ int main(int argc, char *args[])
     SDL_FreeSurface(terrainmap);
     cleanup(renderTarget.window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
+}
+
+void renderDirectionIcon(SDL_Surface *iconmap, struct Critter *enemyList[], SDL_Surface *dst) {
+    switch (lastDirection) {
+        case SOUTHWEST:
+        placeTile(iconmap, 0, SOUTHWEST, enemyList[currentPlayer]->x - TILE_SIZE, enemyList[currentPlayer]->y + TILE_SIZE, dst);
+        break;
+
+        case SOUTH:
+        placeTile(iconmap, 0, SOUTH, enemyList[currentPlayer]->x, enemyList[currentPlayer]->y + TILE_SIZE, dst);
+        break;
+
+        case SOUTHEAST:
+        placeTile(iconmap, 0, SOUTHEAST, enemyList[currentPlayer]->x + TILE_SIZE, enemyList[currentPlayer]->y + TILE_SIZE, dst);
+        break;
+
+        case EAST:
+        placeTile(iconmap, 0, EAST, enemyList[currentPlayer]->x + TILE_SIZE, enemyList[currentPlayer]->y, dst);
+        break;
+
+        case NORTHEAST:
+        placeTile(iconmap, 0, NORTHEAST, enemyList[currentPlayer]->x + TILE_SIZE, enemyList[currentPlayer]->y - TILE_SIZE, dst);
+        break;
+
+        case NORTH:
+        placeTile(iconmap, 0, NORTH, enemyList[currentPlayer]->x, enemyList[currentPlayer]->y - TILE_SIZE, dst);
+        break;
+
+        case NORTHWEST:
+        placeTile(iconmap, 0, NORTHWEST, enemyList[currentPlayer]->x - TILE_SIZE, enemyList[currentPlayer]->y - TILE_SIZE, dst);
+        break;
+
+        case WEST:
+        placeTile(iconmap, 0, WEST, enemyList[currentPlayer]->x - TILE_SIZE, enemyList[currentPlayer]->y, dst);
+        break;
+    }
+
+    return;
 }
 
 void gameLogic(struct Critter *hero, struct Critter *enemyList[], int totalEntities) {
@@ -115,7 +164,7 @@ void gameLogic(struct Critter *hero, struct Critter *enemyList[], int totalEntit
             break;
 
             case SOUTH:
-            enemyList[0]->x -= TILE_SIZE;
+            enemyList[0]->y += TILE_SIZE;
             break;
 
             case SOUTHEAST:
