@@ -57,6 +57,8 @@ int lastDirection = NONE;
 bool endTurn = false;
 int gameState = INIT;
 int currentPlayer = 0; // FIXME: this is just a hack to get directional icons working
+int turnOrder[10];
+int currentTurn = 0;
 
 struct RenderTarget init();
 bool initSDL2(SDL_Window *);
@@ -67,7 +69,9 @@ void generateTerrain(SDL_Surface *, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
 void processInputs(SDL_Event *);
-void gameLogic(struct Critter *, struct Critter **, int);
+void gameLogic(struct Critter **, int);
+int randomRange(int, int);
+void shuffleTurnOrder(int);
 void renderDirectionIcon(SDL_Surface *, struct Critter **, SDL_Surface *);
 void cleanup(SDL_Window *);
 
@@ -88,16 +92,18 @@ int main(int argc, char *args[])
     struct Critter leggy = {.srcSpritemap = spritemap, .spriteID = LEGGY, .x = 128, .y = 128 };
     struct Critter leggy2 = {.srcSpritemap = spritemap, .spriteID = LEGGY, .x = 256, .y = 256 }; // FIXME: lazy enemy copy
 
-    struct Critter *enemyList[] = {&leggy, &leggy2};
+    struct Critter *entityList[] = {&hero, &leggy, &leggy2};
+
+    shuffleTurnOrder(3);
 
     SDL_Event e;
     gameState = PLAYER_TURN;
     while (gameState != EXITING) {
         processInputs(&e);
-        gameLogic(&hero, enemyList, 2);
+        gameLogic(entityList, 3);
 
         generateTerrain(terrainmap, renderTarget.screenSurface);
-        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(iconmap, enemyList, renderTarget.screenSurface);
+        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(iconmap, entityList, renderTarget.screenSurface);
         place(hero, renderTarget.screenSurface);
         place(leggy, renderTarget.screenSurface);
         place(leggy2, renderTarget.screenSurface); // FIXME: lazy enemy copy
@@ -107,97 +113,118 @@ int main(int argc, char *args[])
 
     SDL_FreeSurface(spritemap);
     SDL_FreeSurface(terrainmap);
+    SDL_FreeSurface(iconmap);
     cleanup(renderTarget.window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
 }
 
-void renderDirectionIcon(SDL_Surface *iconmap, struct Critter *enemyList[], SDL_Surface *dst) {
+void renderDirectionIcon(SDL_Surface *iconmap, struct Critter *entityList[], SDL_Surface *dst) {
     switch (lastDirection) {
         case SOUTHWEST:
-        placeTile(iconmap, 0, SOUTHWEST, enemyList[currentPlayer]->x - TILE_SIZE, enemyList[currentPlayer]->y + TILE_SIZE, dst);
+        placeTile(iconmap, 0, SOUTHWEST, entityList[currentPlayer]->x - TILE_SIZE, entityList[currentPlayer]->y + TILE_SIZE, dst);
         break;
 
         case SOUTH:
-        placeTile(iconmap, 0, SOUTH, enemyList[currentPlayer]->x, enemyList[currentPlayer]->y + TILE_SIZE, dst);
+        placeTile(iconmap, 0, SOUTH, entityList[currentPlayer]->x, entityList[currentPlayer]->y + TILE_SIZE, dst);
         break;
 
         case SOUTHEAST:
-        placeTile(iconmap, 0, SOUTHEAST, enemyList[currentPlayer]->x + TILE_SIZE, enemyList[currentPlayer]->y + TILE_SIZE, dst);
+        placeTile(iconmap, 0, SOUTHEAST, entityList[currentPlayer]->x + TILE_SIZE, entityList[currentPlayer]->y + TILE_SIZE, dst);
         break;
 
         case EAST:
-        placeTile(iconmap, 0, EAST, enemyList[currentPlayer]->x + TILE_SIZE, enemyList[currentPlayer]->y, dst);
+        placeTile(iconmap, 0, EAST, entityList[currentPlayer]->x + TILE_SIZE, entityList[currentPlayer]->y, dst);
         break;
 
         case NORTHEAST:
-        placeTile(iconmap, 0, NORTHEAST, enemyList[currentPlayer]->x + TILE_SIZE, enemyList[currentPlayer]->y - TILE_SIZE, dst);
+        placeTile(iconmap, 0, NORTHEAST, entityList[currentPlayer]->x + TILE_SIZE, entityList[currentPlayer]->y - TILE_SIZE, dst);
         break;
 
         case NORTH:
-        placeTile(iconmap, 0, NORTH, enemyList[currentPlayer]->x, enemyList[currentPlayer]->y - TILE_SIZE, dst);
+        placeTile(iconmap, 0, NORTH, entityList[currentPlayer]->x, entityList[currentPlayer]->y - TILE_SIZE, dst);
         break;
 
         case NORTHWEST:
-        placeTile(iconmap, 0, NORTHWEST, enemyList[currentPlayer]->x - TILE_SIZE, enemyList[currentPlayer]->y - TILE_SIZE, dst);
+        placeTile(iconmap, 0, NORTHWEST, entityList[currentPlayer]->x - TILE_SIZE, entityList[currentPlayer]->y - TILE_SIZE, dst);
         break;
 
         case WEST:
-        placeTile(iconmap, 0, WEST, enemyList[currentPlayer]->x - TILE_SIZE, enemyList[currentPlayer]->y, dst);
+        placeTile(iconmap, 0, WEST, entityList[currentPlayer]->x - TILE_SIZE, entityList[currentPlayer]->y, dst);
         break;
     }
 
     return;
 }
 
-void gameLogic(struct Critter *hero, struct Critter *enemyList[], int totalEntities) {
+void gameLogic(struct Critter *entityList[], int totalEntities) {
+
+    if (gameState == EXITING) {
+        return;
+    }
+
+    if (turnOrder[currentTurn] == -1) {
+        printf("Player pool exhausted\n");
+        currentTurn = 0;
+        shuffleTurnOrder(3); // FIXME: should not be hardcoded
+    }
+
+    currentPlayer = turnOrder[currentTurn] - 1;
+
+    if (entityList[currentPlayer]->spriteID == HERO) {
+        gameState = HERO_TURN;
+    }
+    else {
+        gameState = PLAYER_TURN;
+    }
+
 
     if (gameState == HERO_TURN) {
-        hero->x += TILE_SIZE;
-        gameState = PLAYER_TURN;
+        printf("It's hero time, baby!\n");
+        entityList[currentPlayer]->x += TILE_SIZE;
+        currentTurn++;
     }
 
     if (endTurn == true){
         switch (lastDirection) {
             case SOUTHWEST:
-            enemyList[0]->x -= TILE_SIZE;
-            enemyList[0]->y += TILE_SIZE;
+            entityList[currentPlayer]->x -= TILE_SIZE;
+            entityList[currentPlayer]->y += TILE_SIZE;
             break;
 
             case SOUTH:
-            enemyList[0]->y += TILE_SIZE;
+            entityList[currentPlayer]->y += TILE_SIZE;
             break;
 
             case SOUTHEAST:
-            enemyList[0]->x += TILE_SIZE;
-            enemyList[0]->y += TILE_SIZE;
+            entityList[currentPlayer]->x += TILE_SIZE;
+            entityList[currentPlayer]->y += TILE_SIZE;
             break;
 
             case EAST:
-            enemyList[0]->x += TILE_SIZE;
+            entityList[currentPlayer]->x += TILE_SIZE;
             break;
 
             case NORTHEAST:
-            enemyList[0]->x += TILE_SIZE;
-            enemyList[0]->y -= TILE_SIZE;
+            entityList[currentPlayer]->x += TILE_SIZE;
+            entityList[currentPlayer]->y -= TILE_SIZE;
             break;
 
             case NORTH:
-            enemyList[0]->y -= TILE_SIZE;
+            entityList[currentPlayer]->y -= TILE_SIZE;
             break;
 
             case NORTHWEST:
-            enemyList[0]->x -= TILE_SIZE;
-            enemyList[0]->y -= TILE_SIZE;
+            entityList[currentPlayer]->x -= TILE_SIZE;
+            entityList[currentPlayer]->y -= TILE_SIZE;
             break;
 
             case WEST:
-            enemyList[0]->x -= TILE_SIZE;
+            entityList[currentPlayer]->x -= TILE_SIZE;
             break;
         }
-
+        currentTurn++;
         lastDirection = NONE;
         endTurn = false;
-        gameState = HERO_TURN;
     }
 
     return;
@@ -306,6 +333,58 @@ void placeTile(SDL_Surface *src, int sprite, int offset, int x, int y, SDL_Surfa
     return;
 }
 
+void shuffleTurnOrder(int number_of_entities) {
+    //set up temporary pool of entities
+    int pool[number_of_entities];
+    //seed the pool
+    for (int i = 0; i < number_of_entities; i++) {
+        pool[i] = i+1;
+    }
+
+    bool doneDrawing = false;
+    int remaining = number_of_entities;
+    int index = 0;
+    while (!doneDrawing) {
+        int draw = randomRange(1, number_of_entities);
+        if (pool[draw] != 0) {
+            turnOrder[index] = draw;
+            pool[draw] = 0;
+            index++;
+            remaining--;
+        }
+        if (remaining == 0) {
+            doneDrawing = true;
+        }
+    }
+    turnOrder[index] = -1; //mark the end of shuffled players
+
+    for (int i = 0; i < number_of_entities + 1; i++) {
+        printf("turn order pos %d is %d\n", i, turnOrder[i]);
+    }
+    return;
+}
+
+// completely stolen from https://stackoverflow.com/a/18386648, ty vitim.us!
+// https://stackoverflow.com/users/938822/vitim-us
+int randomRange(int min, int max) {
+    return min + rand() / (RAND_MAX / (max - min + 1) + 1);
+}
+
+SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
+    SDL_Surface* image = IMG_Load(path);
+    if (image == NULL) {
+        printf("Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
+    }
+    SDL_Surface* optimizedSurface = SDL_ConvertSurface(image, pixelFormat, 0);
+    if(optimizedSurface == NULL) {
+        printf("Unable to optimize image %s! SDL Error: %s\n", path, SDL_GetError());
+    }
+
+    SDL_FreeSurface(image);
+    SDL_SetColorKey(optimizedSurface, SDL_TRUE, SDL_MapRGB(optimizedSurface->format, 0, 0, 0));
+    return optimizedSurface;
+}
+
 struct RenderTarget init() {
     SDL_Window *window = NULL;
     struct RenderTarget tempRenderTarget = { .screenSurface = NULL, .window = NULL };
@@ -334,22 +413,7 @@ struct RenderTarget init() {
     return tempRenderTarget;
 }
 
-SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
-    SDL_Surface* image = IMG_Load(path);
-    if (image == NULL) {
-        printf("Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
-    }
-    SDL_Surface* optimizedSurface = SDL_ConvertSurface(image, pixelFormat, 0);
-    if(optimizedSurface == NULL) {
-        printf("Unable to optimize image %s! SDL Error: %s\n", path, SDL_GetError());
-    }
-
-    SDL_FreeSurface(image);
-    SDL_SetColorKey(optimizedSurface, SDL_TRUE, SDL_MapRGB(optimizedSurface->format, 0, 0, 0));
-    return optimizedSurface;
-}
-
-void cleanup (struct SDL_Window *window)
+void cleanup(struct SDL_Window *window)
 {
     IMG_Quit();
     SDL_DestroyWindow(window);
