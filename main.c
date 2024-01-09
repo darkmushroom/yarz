@@ -8,8 +8,8 @@
 /* TODO: ideally all of this will be dynamic.
  * Dynamically sized levels and a dynamically resized screen
  */
-const int LEVEL_WIDTH = 1920;
-const int LEVEL_HEIGHT = 1440;
+const int LEVEL_WIDTH = 60;
+const int LEVEL_HEIGHT = 45;
 
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
@@ -56,7 +56,7 @@ enum directions {
 int lastDirection = NONE;
 bool endTurn = false;
 int gameState = INIT;
-int currentPlayer = 0; // FIXME: this is just a hack to get directional icons working
+int currentPlayer = 0;
 int turnOrder[10];
 int currentTurn = 0;
 
@@ -65,14 +65,15 @@ bool initSDL2(SDL_Window *);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
 SDL_Window* initWindow(SDL_Window *);
 bool initImageEngine(SDL_Window *);
-void generateTerrain(SDL_Surface *, SDL_Surface *);
+void generateTerrain(int**);
+void renderTerrain(SDL_Surface *, int**, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
 void processInputs(SDL_Event *);
 void gameLogic(struct Critter **, int);
 int randomRange(int, int);
 void shuffleTurnOrder(int);
-void renderDirectionIcon(SDL_Surface *, struct Critter **, SDL_Surface *);
+void renderDirectionIcon(SDL_Surface *, struct Critter *[], SDL_Surface *);
 void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
@@ -94,7 +95,22 @@ int main(int argc, char *args[])
 
     struct Critter *entityList[] = {&hero, &leggy, &leggy2};
 
+    int **map;
+    map = (int**)malloc(sizeof(int*) * LEVEL_WIDTH);
+    for (int i = 0; i < LEVEL_WIDTH; i++) {
+        map[i] = (int*)malloc(sizeof(int) * LEVEL_HEIGHT);
+    }
+
+    for (int i = 0; i < LEVEL_WIDTH; i++) {
+        for (int j = 0; j < LEVEL_HEIGHT; j++) {
+            map[i][j] = 0;
+        }
+    }
+
+    printf("got here\n"); // WHY DOES THE APP CRASH WITHOUT THIS PRINT???
     shuffleTurnOrder(3);
+    generateTerrain(map);
+
 
     SDL_Event e;
     gameState = PLAYER_TURN;
@@ -102,7 +118,9 @@ int main(int argc, char *args[])
         processInputs(&e);
         gameLogic(entityList, 3);
 
-        generateTerrain(terrainmap, renderTarget.screenSurface);
+        renderTerrain(terrainmap, map, renderTarget.screenSurface);
+
+
         if (lastDirection != NONE && endTurn == false) renderDirectionIcon(iconmap, entityList, renderTarget.screenSurface);
         place(hero, renderTarget.screenSurface);
         place(leggy, renderTarget.screenSurface);
@@ -285,8 +303,25 @@ void processInputs(SDL_Event *e) {
     return;
 }
 
-// currently just makes a room with four walls
-void generateTerrain(SDL_Surface *terrainmap, SDL_Surface *dst) {
+void generateTerrain(int **map) {
+    // first, randomize map area
+    for (int i = 0; i < LEVEL_WIDTH; i++) {
+        for (int j = 0; j < LEVEL_HEIGHT; j++) {
+            map[i][j] = randomRange(0, 1);
+        }
+    }
+
+    /*
+    for (int i = 0; i < LEVEL_HEIGHT; i++) {
+        for (int j = 0; j < LEVEL_WIDTH; j++) {
+            printf("%d",map[j][i]);
+        }
+        printf("\n");
+    }
+    */
+}
+
+void renderTerrain(SDL_Surface *terrainmap, int **map, SDL_Surface *dst) {
     enum tileset {
         FLOOR,
         WALLS
@@ -297,20 +332,14 @@ void generateTerrain(SDL_Surface *terrainmap, SDL_Surface *dst) {
         EAST,
         WEST
     };
-    for (int i = 0; i < SCREEN_WIDTH; i += 32) {
-        for (int j = 0; j < SCREEN_HEIGHT; j += 32) {
-            placeTile(terrainmap, FLOOR, 0, i, j, dst);
-            if (j == 0) { //top of map
-                placeTile(terrainmap, WALLS, NORTH, i, j, dst);
+    for (int i = 0; i < LEVEL_WIDTH; i++) {
+        for (int j = 0; j < LEVEL_HEIGHT; j++) {
+            if (map[i][j] == 0) {
+                placeTile(terrainmap, FLOOR, 0, i * 32, j * 32, dst);
             }
-            if (i == 0) { //left of map
-                placeTile(terrainmap, WALLS, WEST, i, j, dst);
-            }
-            if (i == SCREEN_WIDTH - 32) { //right of map
-                placeTile(terrainmap, WALLS, EAST, i, j, dst);
-            }
-            if (j == SCREEN_HEIGHT - 32) { //bottom of map
-                placeTile(terrainmap, WALLS, SOUTH, i, j, dst);
+            if (map[i][j] == 1) {
+                placeTile(terrainmap, FLOOR, 0, i * 32, j * 32, dst);
+                placeTile(terrainmap, WALLS, WEST, i * 32, j * 32, dst);
             }
         }
     }
