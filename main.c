@@ -3,17 +3,21 @@
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 
 /* TODO: ideally all of this will be dynamic.
  * Dynamically sized levels and a dynamically resized screen
  */
-const int LEVEL_WIDTH = 60;
-const int LEVEL_HEIGHT = 45;
-
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 const int TILE_SIZE = 32;
+
+const int LEVEL_WIDTH = 60;
+const int LEVEL_HEIGHT = 45;
+
+const int CAVE_WALL_PROBABILITY = 45; // int percentage, so 50 = 50%
+const int CAVE_GENERATOR_ITERATIONS = 5000;
 
 const int HERO = 0;
 const int LEGGY = 1;
@@ -103,11 +107,18 @@ int main(int argc, char *args[])
 
     for (int i = 0; i < LEVEL_WIDTH; i++) {
         for (int j = 0; j < LEVEL_HEIGHT; j++) {
-            map[i][j] = 0;
+            if ((((LEVEL_WIDTH / 2) - 2) < i) && (i < ((LEVEL_WIDTH / 2) + 2))) {
+                map[i][j] = 0; // blank out the three middle columns to improve generation
+            }
+            else if ((((LEVEL_HEIGHT / 2) - 2) < j) && (j < ((LEVEL_HEIGHT / 2) + 2))) {
+                map[i][j] = 0; // blank out the three middle columns to improve generation
+            }
+            else {
+                map[i][j] = 1;
+            }
         }
     }
 
-    printf("got here\n"); // WHY DOES THE APP CRASH WITHOUT THIS PRINT???
     shuffleTurnOrder(3);
     generateTerrain(map);
 
@@ -303,22 +314,67 @@ void processInputs(SDL_Event *e) {
     return;
 }
 
+
+// TODO: Generate more than one kind of terrain
+// "simple" cave generation based on a naive implementation of the following:
+// https://www.roguebasin.com/index.php?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
 void generateTerrain(int **map) {
+
+    enum {
+        FLOOR,
+        WALL
+    };
+
     // first, randomize map area
-    for (int i = 0; i < LEVEL_WIDTH; i++) {
-        for (int j = 0; j < LEVEL_HEIGHT; j++) {
-            map[i][j] = randomRange(0, 1);
+    // TODO: made this map area smaller by 1 because my ass is lazy..
+    // ..I mean to avoid out-of-bounds errors during generation
+    for (int i = 1; i < LEVEL_WIDTH - 1; i++) {
+        for (int j = 1; j < LEVEL_HEIGHT - 1; j++) {
+            int roll = randomRange(0, 100);
+            if (roll < CAVE_WALL_PROBABILITY) {
+                map[i][j] = 1;
+            }
+            else {
+                map[i][j] = 0;
+            }
         }
     }
 
-    /*
-    for (int i = 0; i < LEVEL_HEIGHT; i++) {
-        for (int j = 0; j < LEVEL_WIDTH; j++) {
-            printf("%d",map[j][i]);
+    // The cave generator works by walking through the map several times.
+    // For each location on the map, it analyzes the 8 adjacent squares.
+    // if those squares contain a wall, we add 1 to our count
+    for (int step = 0; step < CAVE_GENERATOR_ITERATIONS; step++) {
+        for (int i = 1; i < LEVEL_WIDTH - 1; i++) {
+            for (int j = 1; j < LEVEL_HEIGHT - 1; j++) {
+                int wall_count = 0;
+                for (int k = 0; k < 3; k++) {
+                    for (int l = 0; l < 3; l++) {
+                        if (map[i + k - 1][j + l - 1] == WALL && !(k == 1 && l == 1)) wall_count++;
+                    }
+                }
+
+                // if our tile is a flimsy unsupported wall has less than four walls around it, we collapse it into a floor tile
+                // if instead our tile is a floor encroached by more than 4 walls, we fill this tile with a wall
+                if (map[i][j] == WALL && wall_count < 4) map[i][j] = FLOOR;
+                if (map[i][j] == FLOOR && wall_count > 4) map[i][j] = WALL;
+            }
+        }
+    }
+
+    asciiOutputMap(map);
+
+    return;
+}
+
+// strictly for debugging purposes
+void asciiOutputMap(int **map) {
+
+    for (int i = 0; i < LEVEL_WIDTH; i++) {
+        for (int j = 0; j < LEVEL_HEIGHT; j++) {
+            printf("%d", map[i][j]);
         }
         printf("\n");
     }
-    */
 }
 
 void renderTerrain(SDL_Surface *terrainmap, int **map, SDL_Surface *dst) {
@@ -365,6 +421,8 @@ void placeTile(SDL_Surface *src, int sprite, int offset, int x, int y, SDL_Surfa
 void shuffleTurnOrder(int number_of_entities) {
     //set up temporary pool of entities
     int pool[number_of_entities];
+    memset(pool, 0, number_of_entities*sizeof(int));
+
     //seed the pool
     for (int i = 0; i < number_of_entities; i++) {
         pool[i] = i+1;
@@ -374,9 +432,9 @@ void shuffleTurnOrder(int number_of_entities) {
     int remaining = number_of_entities;
     int index = 0;
     while (!doneDrawing) {
-        int draw = randomRange(1, number_of_entities);
+        int draw = randomRange(0, number_of_entities - 1);
         if (pool[draw] != 0) {
-            turnOrder[index] = draw;
+            turnOrder[index] = pool[draw];
             pool[draw] = 0;
             index++;
             remaining--;
