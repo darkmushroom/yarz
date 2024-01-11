@@ -5,7 +5,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-
 /* TODO: ideally all of this will be dynamic.
  * Dynamically sized levels and a dynamically resized screen
  */
@@ -17,7 +16,7 @@ const int LEVEL_WIDTH = 60;
 const int LEVEL_HEIGHT = 45;
 
 const int CAVE_WALL_PROBABILITY = 45; // int percentage, so 50 = 50%
-const int CAVE_GENERATOR_ITERATIONS = 5000;
+const int CAVE_GENERATOR_ITERATIONS = 5;
 
 const int HERO = 0;
 const int LEGGY = 1;
@@ -26,6 +25,7 @@ const int FLOOR = 0;
 struct RenderTarget {
     SDL_Window *window;
     SDL_Surface *screenSurface;
+    SDL_Surface *level;
 };
 
 struct Critter {
@@ -63,6 +63,9 @@ int gameState = INIT;
 int currentPlayer = 0;
 int turnOrder[10];
 int currentTurn = 0;
+int cameraX = 0;
+int cameraY = 0;
+int cameraScale = 1;
 
 struct RenderTarget init();
 bool initSDL2(SDL_Window *);
@@ -78,6 +81,7 @@ void gameLogic(struct Critter **, int);
 int randomRange(int, int);
 void shuffleTurnOrder(int);
 void renderDirectionIcon(SDL_Surface *, struct Critter *[], SDL_Surface *);
+void asciiOutputMap(int**);
 void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
@@ -85,7 +89,9 @@ int main(int argc, char *args[])
     gameState = INIT;
 
     struct RenderTarget renderTarget = init();
-    if (renderTarget.screenSurface == NULL || renderTarget.window == NULL) return EXIT_FAILURE;
+    if (renderTarget.level == NULL ||
+        renderTarget.screenSurface == NULL ||
+        renderTarget.window == NULL) return EXIT_FAILURE;
 
     // TODO: may want to remap alpha color to something other than black
     // FIXME: doesn't check to make sure files are there
@@ -107,15 +113,7 @@ int main(int argc, char *args[])
 
     for (int i = 0; i < LEVEL_WIDTH; i++) {
         for (int j = 0; j < LEVEL_HEIGHT; j++) {
-            if ((((LEVEL_WIDTH / 2) - 2) < i) && (i < ((LEVEL_WIDTH / 2) + 2))) {
-                map[i][j] = 0; // blank out the three middle columns to improve generation
-            }
-            else if ((((LEVEL_HEIGHT / 2) - 2) < j) && (j < ((LEVEL_HEIGHT / 2) + 2))) {
-                map[i][j] = 0; // blank out the three middle columns to improve generation
-            }
-            else {
                 map[i][j] = 1;
-            }
         }
     }
 
@@ -129,13 +127,19 @@ int main(int argc, char *args[])
         processInputs(&e);
         gameLogic(entityList, 3);
 
-        renderTerrain(terrainmap, map, renderTarget.screenSurface);
+        renderTerrain(terrainmap, map, renderTarget.level);
 
 
-        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(iconmap, entityList, renderTarget.screenSurface);
-        place(hero, renderTarget.screenSurface);
-        place(leggy, renderTarget.screenSurface);
-        place(leggy2, renderTarget.screenSurface); // FIXME: lazy enemy copy
+        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(iconmap, entityList, renderTarget.level);
+        place(hero, renderTarget.level);
+        place(leggy, renderTarget.level);
+        place(leggy2, renderTarget.level); // FIXME: lazy enemy copy
+
+
+        SDL_Rect camera = {.x = cameraX, .y = cameraY, .h = SCREEN_HEIGHT + cameraScale, .w = SCREEN_WIDTH + cameraScale};
+        SDL_Rect projection = {.x = 0, .y = 0, .h = SCREEN_HEIGHT, .w = SCREEN_WIDTH};
+        SDL_BlitScaled(renderTarget.level, &camera, renderTarget.screenSurface, &projection);
+
         SDL_UpdateWindowSurface(renderTarget.window);
     }
 
@@ -192,7 +196,6 @@ void gameLogic(struct Critter *entityList[], int totalEntities) {
     }
 
     if (turnOrder[currentTurn] == -1) {
-        printf("Player pool exhausted\n");
         currentTurn = 0;
         shuffleTurnOrder(3); // FIXME: should not be hardcoded
     }
@@ -208,7 +211,6 @@ void gameLogic(struct Critter *entityList[], int totalEntities) {
 
 
     if (gameState == HERO_TURN) {
-        printf("It's hero time, baby!\n");
         entityList[currentPlayer]->x += TILE_SIZE;
         currentTurn++;
     }
@@ -307,6 +309,29 @@ void processInputs(SDL_Event *e) {
                 case SDLK_KP_ENTER:
                 endTurn = true;
                 break;
+
+                case SDLK_w:
+                cameraY -= 5;
+                break;
+
+                case SDLK_a:
+                cameraX -= 5;
+                break;
+
+                case SDLK_s:
+                cameraY += 5;
+                break;
+
+                case SDLK_d:
+                cameraX +=5;
+                break;
+
+                case SDLK_PLUS:
+                cameraScale += 32;
+                break;
+
+                case SDLK_MINUS:
+                cameraScale -= 32;
             }
         }
     }
@@ -445,9 +470,14 @@ void shuffleTurnOrder(int number_of_entities) {
     }
     turnOrder[index] = -1; //mark the end of shuffled players
 
+    printf("Turn order is player:");
     for (int i = 0; i < number_of_entities + 1; i++) {
-        printf("turn order pos %d is %d\n", i, turnOrder[i]);
+        printf(" %d", turnOrder[i]);
+        if (i < number_of_entities) printf(",");
+        printf(" ");
     }
+    printf("\n");
+
     return;
 }
 
@@ -495,8 +525,14 @@ struct RenderTarget init() {
         return tempRenderTarget;
     }
 
+    // FIXME: screenSurface creation and level creation do not check for errors
     tempRenderTarget.window = window;
     tempRenderTarget.screenSurface = SDL_GetWindowSurface(window);
+
+    // this monster of a declaration basically says 'give me a surface the size of the level in the same format as the screen'
+    // the other surfaces are optimized to the screen format on load
+    tempRenderTarget.level = SDL_CreateRGBSurfaceWithFormat(0, LEVEL_WIDTH * TILE_SIZE, LEVEL_HEIGHT * TILE_SIZE, tempRenderTarget.screenSurface->format->BitsPerPixel, tempRenderTarget.screenSurface->format->format);
+
     return tempRenderTarget;
 }
 
