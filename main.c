@@ -65,7 +65,7 @@ int turnOrder[10];
 int currentTurn = 0;
 int cameraX = 0;
 int cameraY = 0;
-int cameraScale = 1;
+int cameraScale = 0;
 
 struct RenderTarget init();
 bool initSDL2(SDL_Window *);
@@ -105,6 +105,7 @@ int main(int argc, char *args[])
 
     struct Critter *entityList[] = {&hero, &leggy, &leggy2};
 
+    // FIXME: malloc should check for NULL, as unlikely it is our host cannot afford a few MB
     int **map;
     map = (int**)malloc(sizeof(int*) * LEVEL_WIDTH);
     for (int i = 0; i < LEVEL_WIDTH; i++) {
@@ -147,6 +148,7 @@ int main(int argc, char *args[])
     SDL_FreeSurface(spritemap);
     SDL_FreeSurface(terrainmap);
     SDL_FreeSurface(iconmap);
+    SDL_FreeSurface(renderTarget.level);
     cleanup(renderTarget.window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
 }
@@ -326,12 +328,17 @@ void processInputs(SDL_Event *e) {
                 cameraX +=5;
                 break;
 
-                case SDLK_PLUS:
-                cameraScale += 32;
+                case SDLK_EQUALS:
+                cameraScale += 5;
                 break;
 
                 case SDLK_MINUS:
-                cameraScale -= 32;
+                cameraScale -= 5;
+                break;
+
+                case SDLK_0:
+                cameraScale = 0;
+                break;
             }
         }
     }
@@ -404,6 +411,7 @@ void asciiOutputMap(int **map) {
 
 void renderTerrain(SDL_Surface *terrainmap, int **map, SDL_Surface *dst) {
     enum tileset {
+        CAVE,
         FLOOR,
         WALLS
     };
@@ -419,8 +427,7 @@ void renderTerrain(SDL_Surface *terrainmap, int **map, SDL_Surface *dst) {
                 placeTile(terrainmap, FLOOR, 0, i * 32, j * 32, dst);
             }
             if (map[i][j] == 1) {
-                placeTile(terrainmap, FLOOR, 0, i * 32, j * 32, dst);
-                placeTile(terrainmap, WALLS, WEST, i * 32, j * 32, dst);
+                placeTile(terrainmap, CAVE, 0, i * 32, j * 32, dst);
             }
         }
     }
