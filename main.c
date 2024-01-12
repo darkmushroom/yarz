@@ -8,8 +8,8 @@
 /* TODO: ideally all of this will be dynamic.
  * Dynamically sized levels and a dynamically resized screen
  */
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
+int SCREEN_WIDTH = 640;
+int SCREEN_HEIGHT = 480;
 const int TILE_SIZE = 32;
 
 const int LEVEL_WIDTH = 60;
@@ -66,6 +66,7 @@ int currentTurn = 0;
 int cameraX = 0;
 int cameraY = 0;
 int cameraScale = 0;
+bool resizing = false;
 
 struct RenderTarget init();
 bool initSDL2(SDL_Window *);
@@ -126,6 +127,14 @@ int main(int argc, char *args[])
     gameState = PLAYER_TURN;
     while (gameState != EXITING) {
         processInputs(&e);
+
+        // any time the window is resized we must discard the old surface we got for the window and acquire a new one
+        if (resizing == true) {
+            SDL_FreeSurface(renderTarget.screenSurface);
+            renderTarget.screenSurface = SDL_GetWindowSurface(renderTarget.window);
+            resizing = false;
+        }
+
         gameLogic(entityList, 3);
 
         renderTerrain(terrainmap, map, renderTarget.level);
@@ -269,6 +278,16 @@ void processInputs(SDL_Event *e) {
             gameState = EXITING;
             return;
         }
+        if (e->type == SDL_WINDOWEVENT){
+            if (e->window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                SCREEN_WIDTH = e->window.data1;
+                SCREEN_HEIGHT = e->window.data2;
+                printf("new screen width: %d\n", SCREEN_WIDTH);
+                printf("new screen height: %d\n", SCREEN_HEIGHT);
+                resizing = true;
+            }
+        }
+
         if (e->type == SDL_KEYDOWN) {
             switch (e->key.keysym.sym) {
                 case SDLK_KP_1:
@@ -518,7 +537,7 @@ struct RenderTarget init() {
         return tempRenderTarget;
     }
 
-    window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         cleanup(window);
