@@ -1,5 +1,6 @@
 #include "SDL.h"
 #include "SDL_image.h"
+#include "SDL_ttf.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdbool.h>
@@ -67,6 +68,7 @@ int cameraX = 0;
 int cameraY = 0;
 int cameraScale = 0;
 bool resizing = false;
+bool debugInfoChanged = false;
 
 struct RenderTarget init();
 bool initSDL2(SDL_Window *);
@@ -82,6 +84,7 @@ void gameLogic(struct Critter **, int);
 int randomRange(int, int);
 void shuffleTurnOrder(int);
 void renderDirectionIcon(SDL_Surface *, struct Critter *[], SDL_Surface *);
+SDL_Surface* updateDebugInfo(TTF_Font *);
 void asciiOutputMap(int**);
 void cleanup(SDL_Window *);
 
@@ -99,6 +102,7 @@ int main(int argc, char *args[])
     SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", renderTarget.screenSurface->format);
     SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", renderTarget.screenSurface->format);
     SDL_Surface *iconmap = loadSpritemap("assets/yarz-icons.png", renderTarget.screenSurface->format);
+    TTF_Font *major_mono = TTF_OpenFont("assets/MajorMonoDisplay-Regular.ttf", 24);
 
     struct Critter hero = {.srcSpritemap = spritemap, .spriteID = HERO, .x = 0, .y = 0 };
     struct Critter leggy = {.srcSpritemap = spritemap, .spriteID = LEGGY, .x = 128, .y = 128 };
@@ -125,6 +129,8 @@ int main(int argc, char *args[])
 
     SDL_Event e;
     gameState = PLAYER_TURN;
+    SDL_Surface *debugInfo = updateDebugInfo(major_mono);
+    SDL_Rect debugTextRect = {.h = debugInfo->h, .w = debugInfo->w, .x = 0, .y = 0};
     while (gameState != EXITING) {
         processInputs(&e);
 
@@ -145,21 +151,37 @@ int main(int argc, char *args[])
         place(leggy, renderTarget.level);
         place(leggy2, renderTarget.level); // FIXME: lazy enemy copy
 
-
-        SDL_Rect camera = {.x = cameraX, .y = cameraY, .h = SCREEN_HEIGHT + cameraScale, .w = SCREEN_WIDTH + cameraScale};
+        SDL_Rect camera = {.x = cameraX, .y = cameraY, .h = SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)), .w = SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100))};
         SDL_Rect projection = {.x = 0, .y = 0, .h = SCREEN_HEIGHT, .w = SCREEN_WIDTH};
         SDL_BlitScaled(renderTarget.level, &camera, renderTarget.screenSurface, &projection);
+
+        if (debugInfoChanged) {
+            SDL_FreeSurface(debugInfo);
+            debugInfo = updateDebugInfo(major_mono);
+            debugTextRect.h = debugInfo->h;
+            debugTextRect.w = debugInfo->w;
+            debugInfoChanged = false;
+        }
+
+        SDL_BlitSurface(debugInfo, &debugTextRect, renderTarget.screenSurface, &debugTextRect);
 
         SDL_UpdateWindowSurface(renderTarget.window);
     }
 
-
+    SDL_FreeSurface(debugInfo);
     SDL_FreeSurface(spritemap);
     SDL_FreeSurface(terrainmap);
     SDL_FreeSurface(iconmap);
     SDL_FreeSurface(renderTarget.level);
     cleanup(renderTarget.window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
+}
+
+SDL_Surface *updateDebugInfo(TTF_Font *font) {
+    char debugCameraText[100];
+    snprintf(debugCameraText, 100,"camera height + scale: %d\ncamera width + scale: %d", SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)), SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100)));
+    SDL_Color yellow = {.r = 227, .g = 227, .b = 18};
+    return TTF_RenderUTF8_Solid_Wrapped(font, debugCameraText, yellow, 0);
 }
 
 void renderDirectionIcon(SDL_Surface *iconmap, struct Critter *entityList[], SDL_Surface *dst) {
@@ -284,6 +306,7 @@ void processInputs(SDL_Event *e) {
                 SCREEN_HEIGHT = e->window.data2;
                 printf("new screen width: %d\n", SCREEN_WIDTH);
                 printf("new screen height: %d\n", SCREEN_HEIGHT);
+                debugInfoChanged = true;
                 resizing = true;
             }
         }
@@ -348,15 +371,18 @@ void processInputs(SDL_Event *e) {
                 break;
 
                 case SDLK_EQUALS:
-                cameraScale += 5;
+                cameraScale += 1;
+                debugInfoChanged = true;
                 break;
 
                 case SDLK_MINUS:
-                cameraScale -= 5;
+                cameraScale -= 1;
+                debugInfoChanged = true;
                 break;
 
                 case SDLK_0:
                 cameraScale = 0;
+                debugInfoChanged = true;
                 break;
             }
         }
@@ -551,6 +577,12 @@ struct RenderTarget init() {
         return tempRenderTarget;
     }
 
+    if (TTF_Init() == -1) {
+        printf("SDL_ttf could not initialize! SDL_ttf Error: %s\n", TTF_GetError());
+        cleanup(window);
+        return tempRenderTarget;
+    }
+
     // FIXME: screenSurface creation and level creation do not check for errors
     tempRenderTarget.window = window;
     tempRenderTarget.screenSurface = SDL_GetWindowSurface(window);
@@ -565,6 +597,7 @@ struct RenderTarget init() {
 void cleanup(struct SDL_Window *window)
 {
     IMG_Quit();
+    TTF_Quit();
     SDL_DestroyWindow(window);
     SDL_Quit();
     return;
