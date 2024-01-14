@@ -27,6 +27,10 @@ struct RenderTarget {
     SDL_Window *window;
     SDL_Surface *screenSurface;
     SDL_Surface *level;
+    SDL_Surface *sprites;
+    SDL_Surface *terrain;
+    SDL_Surface *icons;
+    TTF_Font *gameFont;
 };
 
 struct Critter {
@@ -87,23 +91,11 @@ void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
 {
-    gameState = INIT;
-
     struct RenderTarget renderTarget = init();
-    if (renderTarget.level == NULL ||
-        renderTarget.screenSurface == NULL ||
-        renderTarget.window == NULL) return EXIT_FAILURE;
 
-    // TODO: may want to remap alpha color to something other than black
-    // FIXME: doesn't check to make sure files are there
-    SDL_Surface *spritemap = loadSpritemap("assets/yarz-sprites.png", renderTarget.screenSurface->format);
-    SDL_Surface *terrainmap = loadSpritemap("assets/yarz-terrain.png", renderTarget.screenSurface->format);
-    SDL_Surface *iconmap = loadSpritemap("assets/yarz-icons.png", renderTarget.screenSurface->format);
-    TTF_Font *major_mono = TTF_OpenFont("assets/MajorMonoDisplay-Regular.ttf", 24);
-
-    struct Critter hero = {.srcSpritemap = spritemap, .spriteID = HERO, .x = 0, .y = 0 };
-    struct Critter leggy = {.srcSpritemap = spritemap, .spriteID = LEGGY, .x = 128, .y = 128 };
-    struct Critter leggy2 = {.srcSpritemap = spritemap, .spriteID = LEGGY, .x = 256, .y = 256 }; // FIXME: lazy enemy copy
+    struct Critter hero = {.srcSpritemap = renderTarget.sprites, .spriteID = HERO, .x = 0, .y = 0 };
+    struct Critter leggy = {.srcSpritemap = renderTarget.sprites, .spriteID = LEGGY, .x = 128, .y = 128 };
+    struct Critter leggy2 = {.srcSpritemap = renderTarget.sprites, .spriteID = LEGGY, .x = 256, .y = 256 }; // FIXME: lazy enemy copy
 
     struct Critter *entityList[] = {&hero, &leggy, &leggy2};
 
@@ -126,7 +118,7 @@ int main(int argc, char *args[])
 
     SDL_Event e;
     gameState = PLAYER_TURN;
-    SDL_Surface *debugInfo = updateDebugInfo(major_mono);
+    SDL_Surface *debugInfo = updateDebugInfo(renderTarget.gameFont);
     SDL_Rect debugTextRect = {.h = debugInfo->h, .w = debugInfo->w, .x = 0, .y = 0};
     while (gameState != EXITING) {
         processInputs(&e);
@@ -140,10 +132,10 @@ int main(int argc, char *args[])
 
         gameLogic(entityList, 3);
 
-        renderTerrain(terrainmap, map, renderTarget.level);
+        renderTerrain(renderTarget.terrain, map, renderTarget.level);
 
 
-        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(iconmap, entityList, renderTarget.level);
+        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(renderTarget.icons, entityList, renderTarget.level);
         place(hero, renderTarget.level);
         place(leggy, renderTarget.level);
         place(leggy2, renderTarget.level); // FIXME: lazy enemy copy
@@ -154,7 +146,7 @@ int main(int argc, char *args[])
 
         if (debugInfoChanged) {
             SDL_FreeSurface(debugInfo);
-            debugInfo = updateDebugInfo(major_mono);
+            debugInfo = updateDebugInfo(renderTarget.gameFont);
             debugTextRect.h = debugInfo->h;
             debugTextRect.w = debugInfo->w;
             debugInfoChanged = false;
@@ -166,9 +158,9 @@ int main(int argc, char *args[])
     }
 
     SDL_FreeSurface(debugInfo);
-    SDL_FreeSurface(spritemap);
-    SDL_FreeSurface(terrainmap);
-    SDL_FreeSurface(iconmap);
+    SDL_FreeSurface(renderTarget.sprites);
+    SDL_FreeSurface(renderTarget.terrain);
+    SDL_FreeSurface(renderTarget.icons);
     SDL_FreeSurface(renderTarget.level);
     cleanup(renderTarget.window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
@@ -536,59 +528,102 @@ int randomRange(int min, int max) {
     return min + rand() / (RAND_MAX / (max - min + 1) + 1);
 }
 
-SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
-    SDL_Surface* image = IMG_Load(path);
-    if (image == NULL) {
-        printf("Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
-    }
-    SDL_Surface* optimizedSurface = SDL_ConvertSurface(image, pixelFormat, 0);
-    if(optimizedSurface == NULL) {
-        printf("Unable to optimize image %s! SDL Error: %s\n", path, SDL_GetError());
-    }
-
-    SDL_FreeSurface(image);
-    SDL_SetColorKey(optimizedSurface, SDL_TRUE, SDL_MapRGB(optimizedSurface->format, 0, 0, 0));
-    return optimizedSurface;
-}
-
 struct RenderTarget init() {
-    SDL_Window *window = NULL;
-    struct RenderTarget tempRenderTarget = { .screenSurface = NULL, .window = NULL };
+    struct RenderTarget tempRenderTarget = { NULL };
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL not initialized! SDL_Error: %s\n", SDL_GetError());
-        cleanup(window);
+        cleanup(NULL);
+        gameState = EXITING;
         return tempRenderTarget;
     }
 
-    window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-    if (window == NULL) {
+    tempRenderTarget.window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    if (tempRenderTarget.window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
-        cleanup(window);
+        cleanup(tempRenderTarget.window);
+        gameState = EXITING;
         return tempRenderTarget;
     }
 
     int imgFlags = IMG_Init(IMG_INIT_PNG);
     if (!(imgFlags & IMG_INIT_PNG)) {
         printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
-        cleanup(window);
+        cleanup(tempRenderTarget.window);
+        gameState = EXITING;
         return tempRenderTarget;
     }
 
     if (TTF_Init() == -1) {
         printf("SDL_ttf could not initialize! SDL_ttf Error: %s\n", TTF_GetError());
-        cleanup(window);
+        cleanup(tempRenderTarget.window);
+        gameState = EXITING;
         return tempRenderTarget;
     }
 
-    // FIXME: screenSurface creation and level creation do not check for errors
-    tempRenderTarget.window = window;
-    tempRenderTarget.screenSurface = SDL_GetWindowSurface(window);
+    tempRenderTarget.screenSurface = SDL_GetWindowSurface(tempRenderTarget.window);
+    if (tempRenderTarget.screenSurface == NULL) {
+        printf("Could not capture screen surface! SDL_Error: %s\n", SDL_GetError());
+        cleanup(tempRenderTarget.window);
+        gameState = EXITING;
+        return tempRenderTarget;
+    }
+
+    tempRenderTarget.sprites = loadSpritemap("assets/yarz-sprites.png", tempRenderTarget.screenSurface->format);
+    tempRenderTarget.terrain = loadSpritemap("assets/yarz-terrain.png", tempRenderTarget.screenSurface->format);
+    tempRenderTarget.icons = loadSpritemap("assets/yarz-icons.png", tempRenderTarget.screenSurface->format);
+
+    if (tempRenderTarget.sprites == NULL ||
+        tempRenderTarget.terrain == NULL ||
+        tempRenderTarget.icons == NULL) {
+
+        cleanup(tempRenderTarget.window);
+        gameState = EXITING;
+        return tempRenderTarget;
+    }
+
+    tempRenderTarget.gameFont = TTF_OpenFont("assets/MajorMonoDisplay-Regular.ttf", 24);
+    if (tempRenderTarget.gameFont == NULL) {
+        printf("Could not open font MajorMonoDisplay-Regular! TTF_Error: %s\n", TTF_GetError());
+
+        cleanup(tempRenderTarget.window);
+        gameState = EXITING;
+        return tempRenderTarget;
+    }
 
     // this monster of a declaration basically says 'give me a surface the size of the level in the same format as the screen'
     // the other surfaces are optimized to the screen format on load
     tempRenderTarget.level = SDL_CreateRGBSurfaceWithFormat(0, LEVEL_WIDTH * TILE_SIZE, LEVEL_HEIGHT * TILE_SIZE, tempRenderTarget.screenSurface->format->BitsPerPixel, tempRenderTarget.screenSurface->format->format);
+    if (tempRenderTarget.level == NULL) {
+        printf("Could not create level surface! SDL_Error: %s\n", SDL_GetError());
+        cleanup(tempRenderTarget.window);
+        gameState = EXITING;
+        return tempRenderTarget;
+    }
 
     return tempRenderTarget;
+}
+
+SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
+    SDL_Surface* image = IMG_Load(path);
+    if (image == NULL) {
+        printf("Unable to load image %s! SDL Error: %s\n", path, IMG_GetError());
+        return NULL;
+    }
+    SDL_Surface* optimizedSurface = SDL_ConvertSurface(image, pixelFormat, 0);
+    if(optimizedSurface == NULL) {
+        printf("Unable to optimize image %s! SDL Error: %s\n", path, SDL_GetError());
+        return NULL;
+    }
+
+    SDL_FreeSurface(image);
+
+    // TODO: may want to remap alpha color to something other than black
+    if (SDL_SetColorKey(optimizedSurface, SDL_TRUE, SDL_MapRGB(optimizedSurface->format, 0, 0, 0)) < 0) {
+        printf("Unable to set transparent pixel for image %s! SDL Error: %s\n", path, SDL_GetError());
+        return NULL;
+    }
+
+    return optimizedSurface;
 }
 
 void cleanup(struct SDL_Window *window)
