@@ -71,10 +71,7 @@ bool resizing = false;
 bool debugInfoChanged = false;
 
 struct RenderTarget init();
-bool initSDL2(SDL_Window *);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
-SDL_Window* initWindow(SDL_Window *);
-bool initImageEngine(SDL_Window *);
 void generateTerrain(int**);
 void renderTerrain(SDL_Surface *, int**, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
@@ -179,7 +176,7 @@ int main(int argc, char *args[])
 
 SDL_Surface *updateDebugInfo(TTF_Font *font) {
     char debugCameraText[100];
-    snprintf(debugCameraText, 100,"camera height + scale: %d\ncamera width + scale: %d", SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)), SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100)));
+    snprintf(debugCameraText, 100,"  scale value: %d\n scaled width: %d\nscaled height: %d", cameraScale, SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100)), SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)));
     SDL_Color yellow = {.r = 227, .g = 227, .b = 18};
     return TTF_RenderUTF8_Solid_Wrapped(font, debugCameraText, yellow, 0);
 }
