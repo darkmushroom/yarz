@@ -49,20 +49,20 @@ enum gameState {
     GAME_OVER
 };
 
-enum directions {
+enum inputs {
     NONE,
-    NORTHWEST,
-    NORTH,
-    NORTHEAST,
-    EAST,
-    SOUTHEAST,
-    SOUTH,
-    SOUTHWEST,
-    WEST,
+    UP_LEFT,
+    UP,
+    UP_RIGHT,
+    RIGHT,
+    DOWN_RIGHT,
+    DOWN,
+    DOWN_LEFT,
+    LEFT,
     SKIP
 };
 
-int lastDirection = NONE;
+int lastInput = NONE;
 bool endTurn = false;
 int gameState = INIT;
 int currentPlayer = 0;
@@ -81,7 +81,7 @@ void renderTerrain(SDL_Surface *, int**, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
 void processInputs(SDL_Event *);
-void gameLogic(struct Critter **, int);
+void gameUpdate(struct Critter **, int);
 int randomRange(int, int);
 void shuffleTurnOrder(int);
 void renderDirectionIcon(SDL_Surface *, struct Critter *[], SDL_Surface *);
@@ -115,11 +115,13 @@ int main(int argc, char *args[])
     shuffleTurnOrder(3);
     generateTerrain(map);
 
-
-    SDL_Event e;
     gameState = PLAYER_TURN;
     SDL_Surface *debugInfo = updateDebugInfo(renderTarget.gameFont);
     SDL_Rect debugTextRect = {.h = debugInfo->h, .w = debugInfo->w, .x = 0, .y = 0};
+
+    // make space for variables to reuse in main game loop:
+    SDL_Event e;
+
     while (gameState != EXITING) {
         processInputs(&e);
 
@@ -130,12 +132,12 @@ int main(int argc, char *args[])
             resizing = false;
         }
 
-        gameLogic(entityList, 3);
+        gameUpdate(entityList, 3);
 
         renderTerrain(renderTarget.terrain, map, renderTarget.level);
 
 
-        if (lastDirection != NONE && endTurn == false) renderDirectionIcon(renderTarget.icons, entityList, renderTarget.level);
+        if (lastInput != NONE && endTurn == false) renderDirectionIcon(renderTarget.icons, entityList, renderTarget.level);
         place(hero, renderTarget.level);
         place(leggy, renderTarget.level);
         place(leggy2, renderTarget.level); // FIXME: lazy enemy copy
@@ -173,8 +175,10 @@ SDL_Surface *updateDebugInfo(TTF_Font *font) {
     return TTF_RenderUTF8_Solid_Wrapped(font, debugCameraText, yellow, 0);
 }
 
+
 void renderDirectionIcon(SDL_Surface *iconmap, struct Critter *entityList[], SDL_Surface *dst) {
-    switch (lastDirection) {
+    /* FIXME: can't decide if I want to translate inputs to directions
+    switch (lastInput) {
         case SOUTHWEST:
         placeTile(iconmap, 0, SOUTHWEST, entityList[currentPlayer]->x - TILE_SIZE, entityList[currentPlayer]->y + TILE_SIZE, dst);
         break;
@@ -207,14 +211,20 @@ void renderDirectionIcon(SDL_Surface *iconmap, struct Critter *entityList[], SDL
         placeTile(iconmap, 0, WEST, entityList[currentPlayer]->x - TILE_SIZE, entityList[currentPlayer]->y, dst);
         break;
     }
-
+    */
     return;
 }
 
-void gameLogic(struct Critter *entityList[], int totalEntities) {
+
+void gameUpdate(struct Critter *entityList[], int totalEntities) {
 
     if (gameState == EXITING) {
         return;
+    }
+
+    // TODO: gameState NEW_GAME should show some kind of title screen
+    if (gameState == INIT) {
+        gameState = NEW_GAME;
     }
 
     if (turnOrder[currentTurn] == -1) {
@@ -231,52 +241,51 @@ void gameLogic(struct Critter *entityList[], int totalEntities) {
         gameState = PLAYER_TURN;
     }
 
-
     if (gameState == HERO_TURN) {
         entityList[currentPlayer]->x += TILE_SIZE;
         currentTurn++;
     }
 
     if (endTurn == true){
-        switch (lastDirection) {
-            case SOUTHWEST:
+        switch (lastInput) {
+            case DOWN_LEFT:
             entityList[currentPlayer]->x -= TILE_SIZE;
             entityList[currentPlayer]->y += TILE_SIZE;
             break;
 
-            case SOUTH:
+            case DOWN:
             entityList[currentPlayer]->y += TILE_SIZE;
             break;
 
-            case SOUTHEAST:
+            case DOWN_RIGHT:
             entityList[currentPlayer]->x += TILE_SIZE;
             entityList[currentPlayer]->y += TILE_SIZE;
             break;
 
-            case EAST:
+            case RIGHT:
             entityList[currentPlayer]->x += TILE_SIZE;
             break;
 
-            case NORTHEAST:
+            case UP_RIGHT:
             entityList[currentPlayer]->x += TILE_SIZE;
             entityList[currentPlayer]->y -= TILE_SIZE;
             break;
 
-            case NORTH:
+            case UP:
             entityList[currentPlayer]->y -= TILE_SIZE;
             break;
 
-            case NORTHWEST:
+            case UP_LEFT:
             entityList[currentPlayer]->x -= TILE_SIZE;
             entityList[currentPlayer]->y -= TILE_SIZE;
             break;
 
-            case WEST:
+            case LEFT:
             entityList[currentPlayer]->x -= TILE_SIZE;
             break;
         }
         currentTurn++;
-        lastDirection = NONE;
+        lastInput = NONE;
         endTurn = false;
     }
 
@@ -303,46 +312,47 @@ void processInputs(SDL_Event *e) {
         if (e->type == SDL_KEYDOWN) {
             switch (e->key.keysym.sym) {
                 case SDLK_KP_1:
-                lastDirection = SOUTHWEST;
+                lastInput = DOWN_LEFT;
                 break;
 
                 case SDLK_KP_2:
-                lastDirection = SOUTH;
+                lastInput = DOWN;
                 break;
 
                 case SDLK_KP_3:
-                lastDirection = SOUTHEAST;
+                lastInput = DOWN_RIGHT;
                 break;
 
                 case SDLK_KP_4:
-                lastDirection = WEST;
+                lastInput = LEFT;
                 break;
 
                 case SDLK_KP_5:
-                lastDirection = SKIP;
+                lastInput = SKIP;
                 endTurn = true;
                 break;
 
                 case SDLK_KP_6:
-                lastDirection = EAST;
+                lastInput = RIGHT;
                 break;
 
                 case SDLK_KP_7:
-                lastDirection = NORTHWEST;
+                lastInput = UP_LEFT;
                 break;
 
                 case SDLK_KP_8:
-                lastDirection = NORTH;
+                lastInput = UP;
                 break;
 
                 case SDLK_KP_9:
-                lastDirection = NORTHEAST;
+                lastInput = UP_RIGHT;
                 break;
 
                 case SDLK_KP_ENTER:
                 endTurn = true;
                 break;
 
+                // TODO: change these keys to fully qualified camera events (zoom in, zoom out etc)
                 case SDLK_w:
                 cameraY -= 5;
                 break;
