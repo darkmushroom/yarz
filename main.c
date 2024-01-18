@@ -94,6 +94,8 @@ SDL_Surface* updateDebugInfo(TTF_Font *);
 void asciiOutputMap(int**);
 void cleanup(SDL_Window *);
 
+// TODO: should seed RNG
+
 int main(int argc, char *args[])
 {
     struct RenderTarget renderTarget;
@@ -128,7 +130,7 @@ int main(int argc, char *args[])
         // if (lastInput != NONE && endTurn == false) renderDirectionIcon(renderTarget.icons, gameState.entityList, renderTarget.level);
         place(gameState.entityList[0], renderTarget.level);
         place(gameState.entityList[1], renderTarget.level);
-        place(gameState.entityList[2], renderTarget.level); // FIXME: lazy enemy copy
+        place(gameState.entityList[2], renderTarget.level);
 
         SDL_Rect camera = {.x = cameraX, .y = cameraY, .h = SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)), .w = SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100))};
         SDL_Rect projection = {.x = 0, .y = 0, .h = SCREEN_HEIGHT, .w = SCREEN_WIDTH};
@@ -425,8 +427,6 @@ void generateTerrain(int **map) {
         }
     }
 
-    asciiOutputMap(map);
-
     return;
 }
 
@@ -600,6 +600,8 @@ int init(struct RenderTarget *renderTarget, struct GameState *gameState) {
 
     *renderTarget = tempRenderTarget;
 
+    // FIXME: NONE OF THESE MALLOCS HAVE A FREE OR DESTROY CYCLE! :3
+
     // allocating all the space for our map
     gameState->map = (int**) malloc(sizeof(int*) * LEVEL_WIDTH);
     for (int i = 0; i < LEVEL_WIDTH; i++) {
@@ -613,13 +615,12 @@ int init(struct RenderTarget *renderTarget, struct GameState *gameState) {
         }
     }
 
-    gameState->entityList = (struct Critter *) malloc(sizeof(struct Critter) * 3);
-    for (int i = 0; i < 3; i++) {
-        gameState->entityList[i].srcSpritemap = renderTarget->sprites;
-        gameState->entityList[i].spriteID = LEGGY;
-        gameState->entityList[i].x = 0;
-        gameState->entityList[i].y = 0;
-    }
+    struct Critter tempCritterList[] = { { .srcSpritemap = renderTarget->sprites, .spriteID = HERO, .x = 0, .y = 0} ,
+                                         { .srcSpritemap = renderTarget->sprites, .spriteID = LEGGY, .x = 32, .y = 32},
+                                         { .srcSpritemap = renderTarget->sprites, .spriteID = LEGGY, .x = 64, .y = 64} };
+
+    gameState->entityList = (struct Critter *) malloc(sizeof(tempCritterList));
+    memcpy(gameState->entityList, tempCritterList, sizeof(tempCritterList));
 
     return 0;
 }
