@@ -23,16 +23,6 @@ const int HERO = 0;
 const int LEGGY = 1;
 const int FLOOR = 0;
 
-struct RenderTarget {
-    SDL_Window *window;
-    SDL_Surface *screenSurface;
-    SDL_Surface *level;
-    SDL_Surface *sprites;
-    SDL_Surface *terrain;
-    SDL_Surface *icons;
-    TTF_Font *gameFont;
-};
-
 struct Critter {
     SDL_Surface *srcSpritemap;
     int spriteID;
@@ -40,8 +30,20 @@ struct Critter {
     int y;
 };
 
+struct RenderTarget {
+    SDL_Window *window;
+    SDL_Surface *screenSurface;
+};
+
+struct Resources {
+    SDL_Surface *level;
+    SDL_Surface *sprites;
+    SDL_Surface *terrain;
+    SDL_Surface *icons;
+    TTF_Font *gameFont;
+};
+
 struct GameState {
-    int **map;
     struct Critter *entityList;
 };
 
@@ -79,10 +81,11 @@ int cameraScale = 0;
 bool resizing = false;
 bool debugInfoChanged = false;
 
-int init(struct RenderTarget *, struct GameState *);
+int init(struct RenderTarget *, struct Resources *, struct GameState *);
+int generateMap(int ***);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
-void generateTerrain(int**);
-void renderTerrain(SDL_Surface *, int**, SDL_Surface *);
+void generateTerrain(int***);
+void renderTerrain(SDL_Surface *, int***, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
 void processInputs(SDL_Event *);
@@ -99,14 +102,18 @@ void cleanup(SDL_Window *);
 int main(int argc, char *args[])
 {
     struct RenderTarget renderTarget;
+    struct Resources resources;
     struct GameState gameState;
-    init(&renderTarget, &gameState);
+    init(&renderTarget, &resources, &gameState);
+
+    int **map = NULL;
+    generateMap(&map);
+    generateTerrain(&map);
 
     shuffleTurnOrder(3);
-    generateTerrain(gameState.map);
 
     gameStatus = PLAYER_TURN;
-    SDL_Surface *debugInfo = updateDebugInfo(renderTarget.gameFont);
+    SDL_Surface *debugInfo = updateDebugInfo(resources.gameFont);
     SDL_Rect debugTextRect = {.h = debugInfo->h, .w = debugInfo->w, .x = 0, .y = 0};
 
     // make space for variables to reuse in main game loop:
@@ -124,21 +131,21 @@ int main(int argc, char *args[])
 
         gameUpdate(gameState.entityList, 3);
 
-        renderTerrain(renderTarget.terrain, gameState.map, renderTarget.level);
+        renderTerrain(resources.terrain, &map, resources.level);
 
 
         // if (lastInput != NONE && endTurn == false) renderDirectionIcon(renderTarget.icons, gameState.entityList, renderTarget.level);
-        place(gameState.entityList[0], renderTarget.level);
-        place(gameState.entityList[1], renderTarget.level);
-        place(gameState.entityList[2], renderTarget.level);
+        place(gameState.entityList[0], resources.level);
+        place(gameState.entityList[1], resources.level);
+        place(gameState.entityList[2], resources.level);
 
         SDL_Rect camera = {.x = cameraX, .y = cameraY, .h = SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)), .w = SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100))};
         SDL_Rect projection = {.x = 0, .y = 0, .h = SCREEN_HEIGHT, .w = SCREEN_WIDTH};
-        SDL_BlitScaled(renderTarget.level, &camera, renderTarget.screenSurface, &projection);
+        SDL_BlitScaled(resources.level, &camera, renderTarget.screenSurface, &projection);
 
         if (debugInfoChanged) {
             SDL_FreeSurface(debugInfo);
-            debugInfo = updateDebugInfo(renderTarget.gameFont);
+            debugInfo = updateDebugInfo(resources.gameFont);
             debugTextRect.h = debugInfo->h;
             debugTextRect.w = debugInfo->w;
             debugInfoChanged = false;
@@ -150,10 +157,10 @@ int main(int argc, char *args[])
     }
 
     SDL_FreeSurface(debugInfo);
-    SDL_FreeSurface(renderTarget.sprites);
-    SDL_FreeSurface(renderTarget.terrain);
-    SDL_FreeSurface(renderTarget.icons);
-    SDL_FreeSurface(renderTarget.level);
+    SDL_FreeSurface(resources.sprites);
+    SDL_FreeSurface(resources.terrain);
+    SDL_FreeSurface(resources.icons);
+    SDL_FreeSurface(resources.level);
     cleanup(renderTarget.window); // screenSurface also gets freed here, see SDL_DestroyWindow
     return EXIT_SUCCESS;
 }
@@ -384,7 +391,7 @@ void processInputs(SDL_Event *e) {
 // TODO: Generate more than one kind of terrain
 // "simple" cave generation based on a naive implementation of the following:
 // https://www.roguebasin.com/index.php?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
-void generateTerrain(int **map) {
+void generateTerrain(int ***map) {
 
     enum {
         FLOOR,
@@ -398,10 +405,10 @@ void generateTerrain(int **map) {
         for (int j = 1; j < LEVEL_HEIGHT - 1; j++) {
             int roll = randomRange(0, 100);
             if (roll < CAVE_WALL_PROBABILITY) {
-                map[i][j] = 1;
+                (*map)[i][j] = 1;
             }
             else {
-                map[i][j] = 0;
+                (*map)[i][j] = 0;
             }
         }
     }
@@ -415,14 +422,14 @@ void generateTerrain(int **map) {
                 int wall_count = 0;
                 for (int k = 0; k < 3; k++) {
                     for (int l = 0; l < 3; l++) {
-                        if (map[i + k - 1][j + l - 1] == WALL && !(k == 1 && l == 1)) wall_count++;
+                        if ((*map)[i + k - 1][j + l - 1] == WALL && !(k == 1 && l == 1)) wall_count++;
                     }
                 }
 
                 // if our tile is a flimsy unsupported wall has less than four walls around it, we collapse it into a floor tile
                 // if instead our tile is a floor encroached by more than 4 walls, we fill this tile with a wall
-                if (map[i][j] == WALL && wall_count < 4) map[i][j] = FLOOR;
-                if (map[i][j] == FLOOR && wall_count > 4) map[i][j] = WALL;
+                if ((*map)[i][j] == WALL && wall_count < 4) (*map)[i][j] = FLOOR;
+                if ((*map)[i][j] == FLOOR && wall_count > 4) (*map)[i][j] = WALL;
             }
         }
     }
@@ -441,7 +448,7 @@ void asciiOutputMap(int **map) {
     }
 }
 
-void renderTerrain(SDL_Surface *terrainmap, int **map, SDL_Surface *dst) {
+void renderTerrain(SDL_Surface *terrainmap, int ***map, SDL_Surface *dst) {
     enum tileset {
         CAVE,
         FLOOR,
@@ -455,10 +462,10 @@ void renderTerrain(SDL_Surface *terrainmap, int **map, SDL_Surface *dst) {
     };
     for (int i = 0; i < LEVEL_WIDTH; i++) {
         for (int j = 0; j < LEVEL_HEIGHT; j++) {
-            if (map[i][j] == 0) {
+            if ((*map)[i][j] == 0) {
                 placeTile(terrainmap, FLOOR, 0, i * 32, j * 32, dst);
             }
-            if (map[i][j] == 1) {
+            if ((*map)[i][j] == 1) {
                 placeTile(terrainmap, CAVE, 0, i * 32, j * 32, dst);
             }
         }
@@ -526,8 +533,8 @@ int randomRange(int min, int max) {
     return min + rand() / (RAND_MAX / (max - min + 1) + 1);
 }
 
-int init(struct RenderTarget *renderTarget, struct GameState *gameState) {
-    struct RenderTarget tempRenderTarget;
+int init(struct RenderTarget *renderTarget, struct Resources *resources, struct GameState *gameState) {
+
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL not initialized! SDL_Error: %s\n", SDL_GetError());
         cleanup(NULL);
@@ -535,93 +542,101 @@ int init(struct RenderTarget *renderTarget, struct GameState *gameState) {
         return -1;
     }
 
-    tempRenderTarget.window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-    if (tempRenderTarget.window == NULL) {
-        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
-        cleanup(tempRenderTarget.window);
-        gameStatus = EXITING;
-        return -1;
-    }
-
     int imgFlags = IMG_Init(IMG_INIT_PNG);
     if (!(imgFlags & IMG_INIT_PNG)) {
         printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
-        cleanup(tempRenderTarget.window);
+        cleanup(NULL);
         gameStatus = EXITING;
         return -1;
     }
 
     if (TTF_Init() == -1) {
         printf("SDL_ttf could not initialize! SDL_ttf Error: %s\n", TTF_GetError());
-        cleanup(tempRenderTarget.window);
+        cleanup(NULL);
         gameStatus = EXITING;
         return -1;
     }
 
-    tempRenderTarget.screenSurface = SDL_GetWindowSurface(tempRenderTarget.window);
-    if (tempRenderTarget.screenSurface == NULL) {
+    renderTarget->window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    if (renderTarget->window == NULL) {
+        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        cleanup(renderTarget->window);
+        gameStatus = EXITING;
+        return -1;
+    }
+
+    renderTarget->screenSurface = SDL_GetWindowSurface(renderTarget->window);
+    if (renderTarget->screenSurface == NULL) {
         printf("Could not capture screen surface! SDL_Error: %s\n", SDL_GetError());
-        cleanup(tempRenderTarget.window);
+        cleanup(renderTarget->window);
         gameStatus = EXITING;
         return -1;
     }
 
-    tempRenderTarget.sprites = loadSpritemap("assets/yarz-sprites.png", tempRenderTarget.screenSurface->format);
-    tempRenderTarget.terrain = loadSpritemap("assets/yarz-terrain.png", tempRenderTarget.screenSurface->format);
-    tempRenderTarget.icons = loadSpritemap("assets/yarz-icons.png", tempRenderTarget.screenSurface->format);
+    resources->sprites = loadSpritemap("assets/yarz-sprites.png", renderTarget->screenSurface->format);
+    resources->terrain = loadSpritemap("assets/yarz-terrain.png", renderTarget->screenSurface->format);
+    resources->icons = loadSpritemap("assets/yarz-icons.png", renderTarget->screenSurface->format);
 
-    if (tempRenderTarget.sprites == NULL ||
-        tempRenderTarget.terrain == NULL ||
-        tempRenderTarget.icons == NULL) {
+    if (resources->sprites == NULL ||
+        resources->terrain == NULL ||
+        resources->icons == NULL) {
 
-        cleanup(tempRenderTarget.window);
+        cleanup(renderTarget->window);
         gameStatus = EXITING;
         return -1;
     }
 
-    tempRenderTarget.gameFont = TTF_OpenFont("assets/MajorMonoDisplay-Regular.ttf", 24);
-    if (tempRenderTarget.gameFont == NULL) {
+    resources->gameFont = TTF_OpenFont("assets/MajorMonoDisplay-Regular.ttf", 24);
+    if (resources->gameFont == NULL) {
         printf("Could not open font MajorMonoDisplay-Regular! TTF_Error: %s\n", TTF_GetError());
 
-        cleanup(tempRenderTarget.window);
+        cleanup(renderTarget->window);
         gameStatus = EXITING;
         return -1;
     }
 
     // this monster of a declaration basically says 'give me a surface the size of the level in the same format as the screen'
     // the other surfaces are optimized to the screen format on load
-    tempRenderTarget.level = SDL_CreateRGBSurfaceWithFormat(0, LEVEL_WIDTH * TILE_SIZE, LEVEL_HEIGHT * TILE_SIZE, tempRenderTarget.screenSurface->format->BitsPerPixel, tempRenderTarget.screenSurface->format->format);
-    if (tempRenderTarget.level == NULL) {
+    resources->level = SDL_CreateRGBSurfaceWithFormat(0, LEVEL_WIDTH * TILE_SIZE, LEVEL_HEIGHT * TILE_SIZE, renderTarget->screenSurface->format->BitsPerPixel, renderTarget->screenSurface->format->format);
+    if (resources->level == NULL) {
         printf("Could not create level surface! SDL_Error: %s\n", SDL_GetError());
-        cleanup(tempRenderTarget.window);
+        cleanup(renderTarget->window);
         gameStatus = EXITING;
         return -1;
     }
 
-    *renderTarget = tempRenderTarget;
+    // FIXME: this malloc has no destroy! :3
 
-    // FIXME: NONE OF THESE MALLOCS HAVE A FREE OR DESTROY CYCLE! :3
+    struct Critter tempCritterList[] = { { .srcSpritemap = resources->sprites, .spriteID = HERO, .x = 0, .y = 0} ,
+                                         { .srcSpritemap = resources->sprites, .spriteID = LEGGY, .x = 32, .y = 32},
+                                         { .srcSpritemap = resources->sprites, .spriteID = LEGGY, .x = 64, .y = 64} };
 
+    gameState->entityList = (struct Critter *) malloc(sizeof(tempCritterList));
+    memcpy(gameState->entityList, tempCritterList, sizeof(tempCritterList));
+
+    return 0;
+}
+
+int generateMap(int ***map) {
+
+    if (*map != NULL) {
+        for (int i = 0; i < LEVEL_WIDTH; i++) {
+            free((*map)[i]);
+        }
+        free(*map);
+    }
     // allocating all the space for our map
-    gameState->map = (int**) malloc(sizeof(int*) * LEVEL_WIDTH);
+    *map = (int**) malloc(sizeof(int*) * LEVEL_WIDTH);
     for (int i = 0; i < LEVEL_WIDTH; i++) {
-        gameState->map[i] = (int *)malloc(sizeof(int) * LEVEL_HEIGHT);
+        (*map)[i] = (int *)malloc(sizeof(int) * LEVEL_HEIGHT);
     }
 
     // init everything to '1'
     for (int i = 0; i < LEVEL_WIDTH; i++) {
         for (int j = 0; j < LEVEL_HEIGHT; j++) {
-            gameState->map[i][j] = 1;
+            (*map)[i][j] = 1;
         }
     }
-
-    struct Critter tempCritterList[] = { { .srcSpritemap = renderTarget->sprites, .spriteID = HERO, .x = 0, .y = 0} ,
-                                         { .srcSpritemap = renderTarget->sprites, .spriteID = LEGGY, .x = 32, .y = 32},
-                                         { .srcSpritemap = renderTarget->sprites, .spriteID = LEGGY, .x = 64, .y = 64} };
-
-    gameState->entityList = (struct Critter *) malloc(sizeof(tempCritterList));
-    memcpy(gameState->entityList, tempCritterList, sizeof(tempCritterList));
-
     return 0;
 }
 
