@@ -9,8 +9,8 @@
 /* TODO: ideally all of this will be dynamic.
  * Dynamically sized levels and a dynamically resized screen
  */
-int SCREEN_WIDTH = 640;
-int SCREEN_HEIGHT = 480;
+const int INITIAL_SCREEN_WIDTH = 640;
+const int INITIAL_SCREEN_HEIGHT = 480;
 const int TILE_SIZE = 32;
 
 const int LEVEL_WIDTH = 60;
@@ -34,6 +34,8 @@ struct Critter {
 struct RenderTarget {
     SDL_Window *window;
     SDL_Surface *screenSurface;
+    int screenWidth;
+    int screenHeight;
 };
 
 struct Resources {
@@ -42,10 +44,22 @@ struct Resources {
     SDL_Surface *terrain;
     SDL_Surface *icons;
     TTF_Font *gameFont;
+    struct Critter *entityList;
 };
 
 struct GameState {
-    struct Critter *entityList;
+    int lastInput;
+    bool endTurn;
+    int status;
+    int currentPlayer;
+    int *turnOrder;
+    int currentTurn;
+};
+
+struct Camera {
+    int cameraX;
+    int cameraY;
+    int cameraScale;
 };
 
 enum gameStatus {
@@ -70,18 +84,6 @@ enum inputs {
     SKIP
 };
 
-int lastInput = NONE;
-bool endTurn = false;
-int gameStatus = INIT;
-int currentPlayer = 0;
-int turnOrder[10];
-int currentTurn = 0;
-int cameraX = 0;
-int cameraY = 0;
-int cameraScale = 0;
-bool resizing = false;
-bool debugInfoChanged = false;
-
 int init(struct RenderTarget *, struct Resources *, struct GameState *);
 int generateMap(int ***);
 SDL_Surface* loadSpritemap(const char *, SDL_PixelFormat *);
@@ -89,12 +91,12 @@ void generateTerrain(int***);
 void renderTerrain(SDL_Surface *, int***, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(struct Critter, SDL_Surface *);
-void processInputs(SDL_Event *);
-void gameUpdate();
+void processInputs(SDL_Event *, struct GameState *, struct RenderTarget *, struct Camera *, bool *, bool *);
+void gameUpdate(struct GameState *, struct Resources *, int);
 int randomRange(int, int);
-void shuffleTurnOrder(int);
+void shuffleTurnOrder(int**, int);
 //void renderDirectionIcon(SDL_Surface *, struct Critter *[], SDL_Surface *);
-SDL_Surface* updateDebugInfo(TTF_Font *);
+SDL_Surface* updateDebugInfo(TTF_Font *, struct RenderTarget *, int);
 void asciiOutputMap(int**);
 void cleanup(SDL_Window *);
 
@@ -102,26 +104,30 @@ void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
 {
+    struct GameState gameState = { .lastInput = NONE, .endTurn = false, .status = INIT, .currentPlayer = 0, .currentTurn = 0 };
+    struct Camera camera = { .cameraX = 0, .cameraY = 0, .cameraScale = 0 };
+    bool resizing = false;
+    bool debugInfoChanged = false;
     struct RenderTarget renderTarget;
     struct Resources resources;
-    struct GameState gameState;
+
     init(&renderTarget, &resources, &gameState);
 
     int **map = NULL;
     generateMap(&map);
     generateTerrain(&map);
 
-    shuffleTurnOrder(3);
+    shuffleTurnOrder(&gameState.turnOrder, 3);
 
-    gameStatus = PLAYER_TURN;
-    SDL_Surface *debugInfo = updateDebugInfo(resources.gameFont);
+    gameState.status = PLAYER_TURN;
+    SDL_Surface *debugInfo = updateDebugInfo(resources.gameFont, &renderTarget, camera.cameraScale);
     SDL_Rect debugTextRect = {.h = debugInfo->h, .w = debugInfo->w, .x = 0, .y = 0};
 
     // make space for variables to reuse in main game loop:
     SDL_Event e;
 
-    while (gameStatus != EXITING) {
-        processInputs(&e);
+    while (gameState.status != EXITING) {
+        processInputs(&e, &gameState, &renderTarget, &camera, &debugInfoChanged, &resizing);
 
         // any time the window is resized we must discard the old surface we got for the window and acquire a new one
         if (resizing == true) {
@@ -130,23 +136,23 @@ int main(int argc, char *args[])
             resizing = false;
         }
 
-        gameUpdate(gameState.entityList, 3);
+        gameUpdate(&gameState, &resources, 3);
 
         renderTerrain(resources.terrain, &map, resources.level);
 
 
         // if (lastInput != NONE && endTurn == false) renderDirectionIcon(renderTarget.icons, gameState.entityList, renderTarget.level);
-        place(gameState.entityList[0], resources.level);
-        place(gameState.entityList[1], resources.level);
-        place(gameState.entityList[2], resources.level);
+        place(resources.entityList[0], resources.level);
+        place(resources.entityList[1], resources.level);
+        place(resources.entityList[2], resources.level);
 
-        SDL_Rect camera = {.x = cameraX, .y = cameraY, .h = SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)), .w = SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100))};
-        SDL_Rect projection = {.x = 0, .y = 0, .h = SCREEN_HEIGHT, .w = SCREEN_WIDTH};
-        SDL_BlitScaled(resources.level, &camera, renderTarget.screenSurface, &projection);
+        SDL_Rect cameraRect = {.x = camera.cameraX , .y = camera.cameraY, .h = renderTarget.screenHeight + (camera.cameraScale * (renderTarget.screenHeight/100)), .w = renderTarget.screenWidth + (camera.cameraScale * (renderTarget.screenWidth/100))};
+        SDL_Rect projection = {.x = 0, .y = 0, .h = renderTarget.screenHeight, .w = renderTarget.screenWidth};
+        SDL_BlitScaled(resources.level, &cameraRect, renderTarget.screenSurface, &projection);
 
         if (debugInfoChanged) {
             SDL_FreeSurface(debugInfo);
-            debugInfo = updateDebugInfo(resources.gameFont);
+            debugInfo = updateDebugInfo(resources.gameFont, &renderTarget, camera.cameraScale);
             debugTextRect.h = debugInfo->h;
             debugTextRect.w = debugInfo->w;
             debugInfoChanged = false;
@@ -166,9 +172,9 @@ int main(int argc, char *args[])
     return EXIT_SUCCESS;
 }
 
-SDL_Surface *updateDebugInfo(TTF_Font *font) {
+SDL_Surface * updateDebugInfo(TTF_Font *font, struct RenderTarget *renderTarget, int cameraScale) {
     char debugCameraText[100];
-    snprintf(debugCameraText, 100,"  scale value: %d\n scaled width: %d\nscaled height: %d", cameraScale, SCREEN_WIDTH + (cameraScale * (SCREEN_WIDTH/100)), SCREEN_HEIGHT + (cameraScale * (SCREEN_HEIGHT/100)));
+    snprintf(debugCameraText, 100,"  scale value: %d\n scaled width: %d\nscaled height: %d", cameraScale, renderTarget->screenWidth + (cameraScale * (renderTarget->screenWidth/100)), renderTarget->screenHeight + (cameraScale * (renderTarget->screenHeight/100)));
     SDL_Color yellow = {.r = 227, .g = 227, .b = 18};
     return TTF_RenderUTF8_Solid_Wrapped(font, debugCameraText, yellow, 0);
 }
@@ -214,172 +220,172 @@ void renderDirectionIcon(SDL_Surface *iconmap, struct Critter *entityList[], SDL
 }
 */
 
-void gameUpdate(struct Critter *entityList, int totalEntities) {
+void gameUpdate(struct GameState *gameState, struct Resources *resources, int totalEntities) {
 
-    if (gameStatus == EXITING) {
+    if (gameState->status == EXITING) {
         return;
     }
 
     // TODO: gameStatus NEW_GAME should show some kind of title screen
-    if (gameStatus == INIT) {
-        gameStatus = NEW_GAME;
+    if (gameState->status == INIT) {
+        gameState->status = NEW_GAME;
     }
 
-    if (turnOrder[currentTurn] == -1) {
-        currentTurn = 0;
-        shuffleTurnOrder(3); // FIXME: should not be hardcoded
+    if (gameState->turnOrder[gameState->currentTurn] == -1) {
+        gameState->currentTurn = 0;
+        shuffleTurnOrder(&gameState->turnOrder, 3); // FIXME: should not be hardcoded
     }
 
-    currentPlayer = turnOrder[currentTurn] - 1;
+    gameState->currentPlayer = gameState->turnOrder[gameState->currentTurn] - 1;
 
-    if (entityList[currentPlayer].spriteID == HERO) {
-        gameStatus = HERO_TURN;
+    if (resources->entityList[gameState->currentPlayer].spriteID == HERO) {
+        gameState->status = HERO_TURN;
     }
     else {
-        gameStatus = PLAYER_TURN;
+        gameState->status = PLAYER_TURN;
     }
 
-    if (gameStatus == HERO_TURN) {
-        entityList[currentPlayer].x += TILE_SIZE;
-        currentTurn++;
+    if (gameState->status == HERO_TURN) {
+        resources->entityList[gameState->currentPlayer].x += TILE_SIZE;
+        gameState->currentTurn += 1;
     }
 
-    if (endTurn == true){
-        switch (lastInput) {
+    if (gameState->endTurn == true){
+        switch (gameState->lastInput) {
             case DOWN_LEFT:
-            entityList[currentPlayer].x -= TILE_SIZE;
-            entityList[currentPlayer].y += TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].x -= TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].y += TILE_SIZE;
             break;
 
             case DOWN:
-            entityList[currentPlayer].y += TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].y += TILE_SIZE;
             break;
 
             case DOWN_RIGHT:
-            entityList[currentPlayer].x += TILE_SIZE;
-            entityList[currentPlayer].y += TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].x += TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].y += TILE_SIZE;
             break;
 
             case RIGHT:
-            entityList[currentPlayer].x += TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].x += TILE_SIZE;
             break;
 
             case UP_RIGHT:
-            entityList[currentPlayer].x += TILE_SIZE;
-            entityList[currentPlayer].y -= TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].x += TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].y -= TILE_SIZE;
             break;
 
             case UP:
-            entityList[currentPlayer].y -= TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].y -= TILE_SIZE;
             break;
 
             case UP_LEFT:
-            entityList[currentPlayer].x -= TILE_SIZE;
-            entityList[currentPlayer].y -= TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].x -= TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].y -= TILE_SIZE;
             break;
 
             case LEFT:
-            entityList[currentPlayer].x -= TILE_SIZE;
+            resources->entityList[gameState->currentPlayer].x -= TILE_SIZE;
             break;
         }
-        currentTurn++;
-        lastInput = NONE;
-        endTurn = false;
+        gameState->currentTurn += 1;
+        gameState->lastInput = NONE;
+        gameState->endTurn = false;
     }
 
     return;
 }
 
-void processInputs(SDL_Event *e) {
+void processInputs(SDL_Event *e, struct GameState *gamestate, struct RenderTarget *renderTarget, struct Camera *camera, bool *debugInfoChanged, bool *resizing) {
     while (SDL_PollEvent(e)) {
         if (e->type == SDL_QUIT) {
-            gameStatus = EXITING;
+            gamestate->status = EXITING;
             return;
         }
         if (e->type == SDL_WINDOWEVENT){
             if (e->window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-                SCREEN_WIDTH = e->window.data1;
-                SCREEN_HEIGHT = e->window.data2;
-                printf("new screen width: %d\n", SCREEN_WIDTH);
-                printf("new screen height: %d\n", SCREEN_HEIGHT);
-                debugInfoChanged = true;
-                resizing = true;
+                renderTarget->screenWidth = e->window.data1;
+                renderTarget->screenHeight = e->window.data2;
+                printf("new screen width: %d\n", renderTarget->screenWidth);
+                printf("new screen height: %d\n", renderTarget->screenHeight);
+                *debugInfoChanged = true;
+                *resizing = true;
             }
         }
 
         if (e->type == SDL_KEYDOWN) {
             switch (e->key.keysym.sym) {
                 case SDLK_KP_1:
-                lastInput = DOWN_LEFT;
+                gamestate->lastInput = DOWN_LEFT;
                 break;
 
                 case SDLK_KP_2:
-                lastInput = DOWN;
+                gamestate->lastInput = DOWN;
                 break;
 
                 case SDLK_KP_3:
-                lastInput = DOWN_RIGHT;
+                gamestate->lastInput = DOWN_RIGHT;
                 break;
 
                 case SDLK_KP_4:
-                lastInput = LEFT;
+                gamestate->lastInput = LEFT;
                 break;
 
                 case SDLK_KP_5:
-                lastInput = SKIP;
-                endTurn = true;
+                gamestate->lastInput = SKIP;
+                gamestate->endTurn = true;
                 break;
 
                 case SDLK_KP_6:
-                lastInput = RIGHT;
+                gamestate->lastInput = RIGHT;
                 break;
 
                 case SDLK_KP_7:
-                lastInput = UP_LEFT;
+                gamestate->lastInput = UP_LEFT;
                 break;
 
                 case SDLK_KP_8:
-                lastInput = UP;
+                gamestate->lastInput = UP;
                 break;
 
                 case SDLK_KP_9:
-                lastInput = UP_RIGHT;
+                gamestate->lastInput = UP_RIGHT;
                 break;
 
                 case SDLK_KP_ENTER:
-                endTurn = true;
+                gamestate->endTurn = true;
                 break;
 
                 // TODO: change these keys to fully qualified camera events (zoom in, zoom out etc)
                 case SDLK_w:
-                cameraY -= 5;
+                camera->cameraY -= 5;
                 break;
 
                 case SDLK_a:
-                cameraX -= 5;
+                camera->cameraX -= 5;
                 break;
 
                 case SDLK_s:
-                cameraY += 5;
+                camera->cameraY += 5;
                 break;
 
                 case SDLK_d:
-                cameraX +=5;
+                camera->cameraX +=5;
                 break;
 
                 case SDLK_EQUALS:
-                cameraScale += 1;
-                debugInfoChanged = true;
+                camera->cameraScale += 1;
+                *debugInfoChanged = true;
                 break;
 
                 case SDLK_MINUS:
-                cameraScale -= 1;
-                debugInfoChanged = true;
+                camera->cameraScale -= 1;
+                *debugInfoChanged = true;
                 break;
 
                 case SDLK_0:
-                cameraScale = 0;
-                debugInfoChanged = true;
+                camera->cameraScale = 0;
+                *debugInfoChanged = true;
                 break;
             }
         }
@@ -490,7 +496,7 @@ void placeTile(SDL_Surface *src, int sprite, int offset, int x, int y, SDL_Surfa
     return;
 }
 
-void shuffleTurnOrder(int number_of_entities) {
+void shuffleTurnOrder(int **turnOrder, int number_of_entities) {
     //set up temporary pool of entities
     int pool[number_of_entities];
     memset(pool, 0, number_of_entities*sizeof(int));
@@ -506,7 +512,7 @@ void shuffleTurnOrder(int number_of_entities) {
     while (!doneDrawing) {
         int draw = randomRange(0, number_of_entities - 1);
         if (pool[draw] != 0) {
-            turnOrder[index] = pool[draw];
+            (*turnOrder)[index] = pool[draw];
             pool[draw] = 0;
             index++;
             remaining--;
@@ -515,11 +521,11 @@ void shuffleTurnOrder(int number_of_entities) {
             doneDrawing = true;
         }
     }
-    turnOrder[index] = -1; //mark the end of shuffled players
+    (*turnOrder)[index] = -1; //mark the end of shuffled players
 
     printf("Turn order is player:");
     for (int i = 0; i < number_of_entities + 1; i++) {
-        printf(" %d", turnOrder[i]);
+        printf(" %d", (*turnOrder)[i]);
         if (i < number_of_entities) printf(",");
         printf(" ");
     }
@@ -539,7 +545,7 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL not initialized! SDL_Error: %s\n", SDL_GetError());
         cleanup(NULL);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
 
@@ -547,22 +553,22 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
     if (!(imgFlags & IMG_INIT_PNG)) {
         printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
         cleanup(NULL);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
 
     if (TTF_Init() == -1) {
         printf("SDL_ttf could not initialize! SDL_ttf Error: %s\n", TTF_GetError());
         cleanup(NULL);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
 
-    renderTarget->window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    renderTarget->window = SDL_CreateWindow("yarz", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (renderTarget->window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         cleanup(renderTarget->window);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
 
@@ -570,9 +576,12 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
     if (renderTarget->screenSurface == NULL) {
         printf("Could not capture screen surface! SDL_Error: %s\n", SDL_GetError());
         cleanup(renderTarget->window);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
+
+    renderTarget->screenWidth = INITIAL_SCREEN_WIDTH;
+    renderTarget->screenHeight = INITIAL_SCREEN_HEIGHT;
 
     resources->sprites = loadSpritemap("assets/yarz-sprites.png", renderTarget->screenSurface->format);
     resources->terrain = loadSpritemap("assets/yarz-terrain.png", renderTarget->screenSurface->format);
@@ -583,7 +592,7 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
         resources->icons == NULL) {
 
         cleanup(renderTarget->window);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
 
@@ -592,7 +601,7 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
         printf("Could not open font MajorMonoDisplay-Regular! TTF_Error: %s\n", TTF_GetError());
 
         cleanup(renderTarget->window);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
 
@@ -602,18 +611,22 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
     if (resources->level == NULL) {
         printf("Could not create level surface! SDL_Error: %s\n", SDL_GetError());
         cleanup(renderTarget->window);
-        gameStatus = EXITING;
+        gameState->status = EXITING;
         return -1;
     }
 
     // FIXME: this malloc has no destroy! :3
+    gameState->turnOrder = (int *) malloc(sizeof(int) * 10);
+    for (int i = 0; i < 10; i++) {
+        gameState->turnOrder[i] = -1;
+    }
 
     struct Critter tempCritterList[] = { { .srcSpritemap = resources->sprites, .spriteID = HERO, .x = 0, .y = 0} ,
                                          { .srcSpritemap = resources->sprites, .spriteID = LEGGY, .x = 32, .y = 32},
                                          { .srcSpritemap = resources->sprites, .spriteID = BOOTS, .x = 64, .y = 64} };
 
-    gameState->entityList = (struct Critter *) malloc(sizeof(tempCritterList));
-    memcpy(gameState->entityList, tempCritterList, sizeof(tempCritterList));
+    resources->entityList = (struct Critter *) malloc(sizeof(tempCritterList));
+    memcpy(resources->entityList, tempCritterList, sizeof(tempCritterList));
 
     return 0;
 }
