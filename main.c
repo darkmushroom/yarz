@@ -21,6 +21,7 @@ const int CAVE_GENERATOR_ITERATIONS = 5;
 
 const int HERO = 0;
 const int LEGGY = 1;
+const int BOOTS = 2;
 const int FLOOR = 0;
 
 struct Critter {
@@ -609,7 +610,7 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
 
     struct Critter tempCritterList[] = { { .srcSpritemap = resources->sprites, .spriteID = HERO, .x = 0, .y = 0} ,
                                          { .srcSpritemap = resources->sprites, .spriteID = LEGGY, .x = 32, .y = 32},
-                                         { .srcSpritemap = resources->sprites, .spriteID = LEGGY, .x = 64, .y = 64} };
+                                         { .srcSpritemap = resources->sprites, .spriteID = BOOTS, .x = 64, .y = 64} };
 
     gameState->entityList = (struct Critter *) malloc(sizeof(tempCritterList));
     memcpy(gameState->entityList, tempCritterList, sizeof(tempCritterList));
