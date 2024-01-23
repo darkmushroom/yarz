@@ -55,6 +55,7 @@ struct GameState {
     int currentPlayer;
     int *turnOrder;
     int currentTurn;
+    int totalEntities; // intentionally 1-based index
 };
 
 struct Camera {
@@ -106,7 +107,9 @@ void cleanup(SDL_Window *);
 
 int main(int argc, char *args[])
 {
-    struct GameState gameState = { .lastInput = NONE, .endTurn = false, .status = INIT, .currentPlayer = 0, .currentTurn = 0 };
+    // prepare resources that will live for the entirety of the runtime
+    // FIXME: totalEntities should be dynamic based on how many possible entities there are
+    struct GameState gameState = { .lastInput = NONE, .endTurn = false, .status = INIT, .currentPlayer = 0, .currentTurn = 0, .totalEntities = 3 };
     struct Camera camera = { .cameraX = 0, .cameraY = 0, .cameraScale = 0 };
     struct GameMap gameMap = {.map_height = randomRange(50, 100), .map_width = randomRange(50, 100), .map_array = NULL };
     bool resizing = false;
@@ -115,18 +118,14 @@ int main(int argc, char *args[])
     struct Resources resources;
     SDL_Event e;
 
-    generateMap(&gameMap);
-    generateTerrain(&gameMap);
     init(&renderTarget, &resources, &gameState, &gameMap);
 
-    shuffleTurnOrder(&gameState.turnOrder, 3);
-
-    gameState.status = PLAYER_TURN;
+    // surfaces that do not need to be updated every frame
     SDL_Surface *debugInfo = updateDebugInfo(resources.gameFont, &renderTarget, &gameMap, camera.cameraScale);
     SDL_Rect debugTextRect = {.h = debugInfo->h, .w = debugInfo->w, .x = 0, .y = 0};
-
     SDL_Surface *backdrop = SDL_CreateRGBSurfaceWithFormat(0, renderTarget.screenWidth, renderTarget.screenHeight, renderTarget.screenSurface->format->BitsPerPixel, renderTarget.screenSurface->format->format);
     SDL_FillRect(backdrop, NULL, 0);
+
     while (gameState.status != EXITING) {
         processInputs(&e, &gameState, &renderTarget, &camera, &debugInfoChanged, &resizing);
 
@@ -148,7 +147,7 @@ int main(int argc, char *args[])
             gameState.lastInput = NONE;
         }
 
-        gameUpdate(&gameState, &resources, 3);
+        gameUpdate(&gameState, &resources, gameState.totalEntities);
 
         SDL_BlitSurface(backdrop, NULL, renderTarget.screenSurface, NULL);
 
@@ -257,7 +256,7 @@ void gameUpdate(struct GameState *gameState, struct Resources *resources, int to
 
     if (gameState->turnOrder[gameState->currentTurn] == -1) {
         gameState->currentTurn = 0;
-        shuffleTurnOrder(&gameState->turnOrder, 3); // FIXME: should not be hardcoded
+        shuffleTurnOrder(&gameState->turnOrder, gameState->totalEntities); // FIXME: should not be hardcoded
     }
 
     gameState->currentPlayer = gameState->turnOrder[gameState->currentTurn] - 1;
@@ -424,6 +423,8 @@ void processInputs(SDL_Event *e, struct GameState *gamestate, struct RenderTarge
 
 
 // TODO: Generate more than one kind of terrain
+// FIXME: cave terrain generation has a strange bottom-right cutoff issue. I assume this is because we are evaluating the map and editing values in the same step. 
+// Maybe double-buffer it? (analyze map, writing changes to buffer, replace map with buffer, repeat)
 // "simple" cave generation based on a naive implementation of the following:
 // https://www.roguebasin.com/index.php?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
 void generateTerrain(struct GameMap *gameMap) {
@@ -498,17 +499,17 @@ void renderTerrain(SDL_Surface *terrainmap, struct GameMap *gameMap, SDL_Surface
     for (int i = 0; i < gameMap->map_width; i++) {
         for (int j = 0; j < gameMap->map_height; j++) {
             if ((gameMap->map_array)[i][j] == 0) {
-                placeTile(terrainmap, FLOOR, 0, i * 32, j * 32, dst);
+                placeTile(terrainmap, FLOOR, 0, i * TILE_SIZE, j * TILE_SIZE, dst);
             }
             if ((gameMap->map_array)[i][j] == 1) {
-                placeTile(terrainmap, CAVE, 0, i * 32, j * 32, dst);
+                placeTile(terrainmap, CAVE, 0, i * TILE_SIZE, j * TILE_SIZE, dst);
             }
         }
     }
 }
 
 void place(struct Critter sprite, SDL_Surface *dst) {
-    SDL_Rect srcRect = { .h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite.spriteID * 32 };
+    SDL_Rect srcRect = { .h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite.spriteID * TILE_SIZE };
     SDL_Rect dstRect = { .h = 0, .w = 0, .x = sprite.x, .y = sprite.y };
 
     SDL_BlitSurface(sprite.srcSpritemap, &srcRect, dst, &dstRect);
@@ -517,7 +518,7 @@ void place(struct Critter sprite, SDL_Surface *dst) {
 
 void placeTile(SDL_Surface *src, int sprite, int offset, int x, int y, SDL_Surface *dst) {
 
-    SDL_Rect srcRect = {.h = TILE_SIZE, .w = TILE_SIZE, .x = offset * 32, .y = sprite * 32};
+    SDL_Rect srcRect = {.h = TILE_SIZE, .w = TILE_SIZE, .x = offset * TILE_SIZE, .y = sprite * TILE_SIZE};
     SDL_Rect dstRect = {.h = 0, .w = 0, .x = x, .y = y};
 
     SDL_BlitSurface(src, &srcRect, dst, &dstRect);
@@ -633,6 +634,9 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
         return -1;
     }
 
+    generateMap(gameMap);
+    generateTerrain(gameMap);
+
     // this monster of a declaration basically says 'give me a surface the size of the level in the same format as the screen'
     // the other surfaces are optimized to the screen format on load
     resources->level = SDL_CreateRGBSurfaceWithFormat(0, gameMap->map_width * TILE_SIZE, gameMap->map_height * TILE_SIZE, renderTarget->screenSurface->format->BitsPerPixel, renderTarget->screenSurface->format->format);
@@ -644,11 +648,13 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
     }
 
     // FIXME: this malloc has no destroy! :3
+    // FIXME: the value of 10 is hardcoded, we may have more than 10 entities that require turn shuffling
     gameState->turnOrder = (int *) malloc(sizeof(int) * 10);
     for (int i = 0; i < 10; i++) {
         gameState->turnOrder[i] = -1;
     }
 
+    // TODO: This critter list should be loaded from disk
     struct Critter tempCritterList[] = { { .srcSpritemap = resources->sprites, .spriteID = HERO, .x = 0, .y = 0} ,
                                          { .srcSpritemap = resources->sprites, .spriteID = LEGGY, .x = 32, .y = 32},
                                          { .srcSpritemap = resources->sprites, .spriteID = BOOTS, .x = 64, .y = 64} };
