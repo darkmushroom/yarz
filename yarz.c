@@ -62,11 +62,11 @@ int main(int argc, char *args[])
 {
     // prepare resources that will live for the entirety of the runtime
     // FIXME: total_entities should be dynamic based on how many possible entities there are
-    struct GameState gameState = { .last_input = NONE, .end_turn = false, .status = INIT, .current_player = 0, .current_turn = 0, .total_entities = 3 };
-    struct Camera camera = { .camera_x = 0, .camera_y = 0, .camera_scale = 0 };
-    struct GameMap gameMap = {.map_height = randomRange(50, 100), .map_width = randomRange(50, 100), .map_array = NULL };
-    struct RenderTarget renderTarget;
-    struct Resources resources;
+    GameState gameState = { .last_input = NONE, .end_turn = false, .status = INIT, .current_player = 0, .current_turn = 0, .total_entities = 3 };
+    Camera camera = { .camera_x = 0, .camera_y = 0, .camera_scale = 0 };
+    GameMap gameMap = {.map_height = randomRange(50, 100), .map_width = randomRange(50, 100), .map_array = NULL };
+    RenderTarget renderTarget;
+    Resources resources;
     SDL_Event e;
 
     init(&renderTarget, &resources, &gameState, &gameMap, &camera);
@@ -86,7 +86,7 @@ int main(int argc, char *args[])
     return EXIT_SUCCESS;
 }
 
-void render(struct RenderTarget *renderTarget, struct Camera *camera, struct Resources *resources, struct GameMap *gameMap, struct GameState *gamestate) {
+void render(RenderTarget *renderTarget, Camera *camera, Resources *resources, GameMap *gameMap, GameState *gamestate) {
     // any time the window is resized we must discard the old surface we got for the window and acquire a new one
     if (renderTarget->resizing == true) {
         SDL_FreeSurface(renderTarget->screen_surface);
@@ -124,7 +124,7 @@ void render(struct RenderTarget *renderTarget, struct Camera *camera, struct Res
     SDL_UpdateWindowSurface(renderTarget->window);
 }
 
-SDL_Surface * updateDebugInfo(TTF_Font *font, struct RenderTarget *renderTarget, struct GameMap *gameMap, int camera_scale) {
+SDL_Surface * updateDebugInfo(TTF_Font *font, RenderTarget *renderTarget, GameMap *gameMap, int camera_scale) {
     char debugCameraText[200];
     snprintf(debugCameraText, 200,"   resolution: %dx%d\n  scale value: %d\n scaled width: %d\nscaled height: %d\n              tiles/ px\n    map width: (%d) %d\n   map height: (%d) %d",
                                      renderTarget->screen_width,
@@ -142,7 +142,7 @@ SDL_Surface * updateDebugInfo(TTF_Font *font, struct RenderTarget *renderTarget,
 }
 
 
-void renderDirectionIcon(SDL_Surface *icons, struct Critter *entity_list, SDL_Surface *dst, struct GameState *gameState) {
+void renderDirectionIcon(SDL_Surface *icons, Critter *entity_list, SDL_Surface *dst, GameState *gameState) {
 
     switch (gameState->last_input) {
         case DOWN_LEFT:
@@ -182,7 +182,7 @@ void renderDirectionIcon(SDL_Surface *icons, struct Critter *entity_list, SDL_Su
 }
 
 
-void gameUpdate(struct GameState *gameState, struct Resources *resources, struct GameMap *gameMap, struct RenderTarget *renderTarget) {
+void gameUpdate(GameState *gameState, Resources *resources, GameMap *gameMap, RenderTarget *renderTarget) {
 
     if (gameState->status == EXITING) {
         return;
@@ -267,7 +267,7 @@ void gameUpdate(struct GameState *gameState, struct Resources *resources, struct
     return;
 }
 
-void processInputs(SDL_Event *e, struct GameState *gamestate, struct RenderTarget *renderTarget, struct Camera *camera) {
+void processInputs(SDL_Event *e, GameState *gamestate, RenderTarget *renderTarget, Camera *camera) {
     while (SDL_PollEvent(e)) {
         if (e->type == SDL_QUIT) {
             gamestate->status = EXITING;
@@ -369,7 +369,7 @@ void processInputs(SDL_Event *e, struct GameState *gamestate, struct RenderTarge
     return;
 }
 
-void renderTerrain(SDL_Surface *terrainmap, struct GameMap *gameMap, SDL_Surface *dst) {
+void renderTerrain(SDL_Surface *terrainmap, GameMap *gameMap, SDL_Surface *dst) {
     enum tileset {
         CAVE,
         FLOOR,
@@ -393,7 +393,7 @@ void renderTerrain(SDL_Surface *terrainmap, struct GameMap *gameMap, SDL_Surface
     }
 }
 
-void place(struct Critter sprite, SDL_Surface *dst) {
+void place(Critter sprite, SDL_Surface *dst) {
     SDL_Rect srcRect = { .h = TILE_SIZE, .w = TILE_SIZE, .x = 0, .y = sprite.sprite_ID * TILE_SIZE };
     SDL_Rect dstRect = { .h = 0, .w = 0, .x = sprite.x, .y = sprite.y };
 
@@ -448,7 +448,7 @@ void shuffleTurnOrder(int **turn_order, int number_of_entities) {
     return;
 }
 
-int init(struct RenderTarget *renderTarget, struct Resources *resources, struct GameState *gameState, struct GameMap *gameMap, struct Camera *camera) {
+int init(RenderTarget *renderTarget, Resources *resources, GameState *gameState, GameMap *gameMap, Camera *camera) {
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL not initialized! SDL_Error: %s\n", SDL_GetError());
@@ -539,11 +539,11 @@ int init(struct RenderTarget *renderTarget, struct Resources *resources, struct 
     }
 
     // TODO: This critter list should be loaded from disk
-    struct Critter tempCritterList[] = { { .source_sprite_map = resources->sprites, .sprite_ID = HERO, .x = 0, .y = 0} ,
+    Critter tempCritterList[] = { { .source_sprite_map = resources->sprites, .sprite_ID = HERO, .x = 0, .y = 0} ,
                                          { .source_sprite_map = resources->sprites, .sprite_ID = LEGGY, .x = 32, .y = 32},
                                          { .source_sprite_map = resources->sprites, .sprite_ID = BOOTS, .x = 64, .y = 64} };
 
-    resources->entity_list = (struct Critter *) malloc(sizeof(tempCritterList));
+    resources->entity_list = (Critter *) malloc(sizeof(tempCritterList));
     memcpy(resources->entity_list, tempCritterList, sizeof(tempCritterList));
 
     renderTarget->debug_info = updateDebugInfo(resources->game_font, renderTarget, gameMap, camera->camera_scale);
@@ -579,7 +579,7 @@ SDL_Surface* loadSpritemap(const char *path, SDL_PixelFormat *pixelFormat) {
     return optimizedSurface;
 }
 
-void cleanup(struct SDL_Window *window)
+void cleanup(SDL_Window *window)
 {
     IMG_Quit();
     TTF_Quit();

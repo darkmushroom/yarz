@@ -1,4 +1,4 @@
-OBJS = main.c map.c
+OBJS = yarz.c map.c
 
 CC = gcc
 

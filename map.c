@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-int generateMap(struct GameMap *gameMap) {
+int generateMap(GameMap *gameMap) {
 
     //free up the old map
     if (gameMap->map_array != NULL) {
@@ -37,7 +37,7 @@ int generateMap(struct GameMap *gameMap) {
 // Maybe double-buffer it? (analyze map, writing changes to buffer, replace map with buffer, repeat)
 // "simple" cave generation based on a naive implementation of the following:
 // https://www.roguebasin.com/index.php?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
-void generateTerrain(struct GameMap *gameMap) {
+void generateTerrain(GameMap *gameMap) {
 
     enum {
         FLOOR,
@@ -90,7 +90,7 @@ int randomRange(int min, int max) {
 }
 
 // strictly for debugging purposes
-void asciiOutputMap(struct GameMap *gameMap) {
+void asciiOutputMap(GameMap *gameMap) {
 
     for (int i = 0; i < gameMap->map_width; i++) {
         for (int j = 0; j < gameMap->map_height; j++) {
