@@ -43,9 +43,9 @@ typedef struct GameState {
 } GameState;
 
 typedef struct Camera {
-    int camera_x;
-    int camera_y;
-    int camera_scale;
+    int x;
+    int y;
+    int scale;
 } Camera;
 
 int init(RenderTarget *, Resources *, GameState *, GameMap *, Camera *);

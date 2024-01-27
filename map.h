@@ -10,8 +10,8 @@ extern const int CAVE_GENERATOR_ITERATIONS;
 
 // map height and width are in tiles. aka 1 = TILE_SIZE pixels
 typedef struct GameMap {
-    int map_width;
-    int map_height;
+    int width;
+    int height;
     int **map_array;
 } GameMap;
 
