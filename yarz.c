@@ -67,19 +67,17 @@ int main(int argc, char *args[])
           .current_player = 0, .current_turn = 0, .total_entities = 3 };
 
     Camera camera = { .x = 0, .y = 0, .scale = 0 };
-    GameMap game_map = { .map_array = NULL };
-    game_map.height = randomRange(50, 100);
-    game_map.width = randomRange(50, 100);
+    GameMap *game_map = initRandomSizedMap();
     RenderTarget render_target;
     Resources resources;
     SDL_Event e;
 
-    init(&render_target, &resources, &game_state, &game_map, &camera);
+    init(&render_target, &resources, &game_state, game_map, &camera);
 
     while (game_state.status != EXITING) {
         processInputs(&e, &game_state, &render_target, &camera);
         gameUpdate(&game_state, &resources, &game_map, &render_target);
-        render(&render_target, &camera, &resources, &game_map, &game_state);
+        render(&render_target, &camera, &resources, game_map, &game_state);
     }
 
     SDL_FreeSurface(render_target.debug_info);
@@ -236,7 +234,7 @@ void renderDirectionIcon(SDL_Surface *icons, Critter *entity_list,
 }
 
 
-void gameUpdate(GameState *game_state, Resources *resources, GameMap *game_map,
+void gameUpdate(GameState *game_state, Resources *resources, GameMap **game_map,
     RenderTarget *render_target) {
 
     if (game_state->status == EXITING) {
@@ -249,12 +247,11 @@ void gameUpdate(GameState *game_state, Resources *resources, GameMap *game_map,
     }
 
     if (game_state->last_input == DEBUG_GENERATE_NEW_MAP) {
-        generateMap(game_map);
-        generateTerrain(game_map);
+        replaceMap(&(*game_map));
         SDL_FreeSurface(resources->level);
         resources->level =
             SDL_CreateRGBSurfaceWithFormat(0,
-                game_map->width * TILE_SIZE, game_map->height * TILE_SIZE,
+                (*game_map)->width * TILE_SIZE, (*game_map)->height * TILE_SIZE,
                 render_target->screen_surface->format->BitsPerPixel,
                 render_target->screen_surface->format->format);
 
@@ -608,10 +605,10 @@ int init(RenderTarget *render_target, Resources *resources,
         return -1;
     }
 
-    generateMap(game_map);
-    generateTerrain(game_map);
+    generateCaveTerrain(game_map);
 
-    // this monster of a declaration basically says 'give me a surface the size of the level in the same format as the screen'
+    // this monster of a declaration basically says
+    // 'give me a surface the size of the level in the same format as the screen'
     // the other surfaces are optimized to the screen format on load
     resources->level =
         SDL_CreateRGBSurfaceWithFormat(

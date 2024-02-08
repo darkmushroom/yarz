@@ -3,19 +3,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-int generateMap(GameMap *game_map) {
-
-    //free up the old map
-    if (game_map->map_array != NULL) {
-        for (int i = 0; i < game_map->width; i++) {
-            free((game_map->map_array)[i]);
-        }
-        free(game_map->map_array);
-    }
-
-    // randomize map size
-    game_map->width = randomRange(50, 100);
-    game_map->height = randomRange(50, 100);
+// creates a new map of random size initialized to all 1s
+GameMap* initMap(int x_in_tiles, int y_in_tiles) {
+    GameMap *game_map = (GameMap *)malloc(sizeof(GameMap));
+    game_map->width = x_in_tiles;
+    game_map->height = y_in_tiles;
 
     // allocating all the space for our map
     game_map->map_array = (int**) malloc(sizeof(int*) * game_map->width);
@@ -29,7 +21,15 @@ int generateMap(GameMap *game_map) {
             (game_map->map_array)[i][j] = 1;
         }
     }
-    return 0;
+
+    return game_map;
+}
+
+// convenience function, inits a map between 50x50 and 100x100 tiles
+GameMap* initRandomSizedMap() {
+    int width = randomRange(50, 100);
+    int height = randomRange(50, 100);
+    return(initMap(width, height));
 }
 
 // TODO: Generate more than one kind of terrain
@@ -37,7 +37,7 @@ int generateMap(GameMap *game_map) {
 // Maybe double-buffer it? (analyze map, writing changes to buffer, replace map with buffer, repeat)
 // "simple" cave generation based on a naive implementation of the following:
 // https://www.roguebasin.com/index.php?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
-void generateTerrain(GameMap *game_map) {
+void generateCaveTerrain(GameMap *game_map) {
 
     enum {
         FLOOR,
@@ -89,6 +89,32 @@ void generateTerrain(GameMap *game_map) {
     }
 
     return;
+}
+
+int replaceMap(GameMap **game_map) {
+
+    //free up the old map
+    destroyMap(*game_map);
+    *game_map = initRandomSizedMap();
+    generateCaveTerrain(*game_map);
+    return EXIT_SUCCESS;
+}
+
+void destroyMap(GameMap *game_map) {
+
+    //free up the old map_array
+    if (game_map->map_array != NULL) {
+        for (int i = 0; i < game_map->width; i++) {
+            free((game_map->map_array)[i]);
+            (game_map->map_array)[i] = NULL;
+        }
+        free(game_map->map_array);
+        game_map->map_array = NULL;
+    }
+
+    //and finally clear the struct
+    free(game_map);
+    game_map = NULL;
 }
 
 // completely stolen from https://stackoverflow.com/a/18386648, ty vitim.us!

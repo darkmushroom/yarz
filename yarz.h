@@ -54,7 +54,7 @@ void renderTerrain(SDL_Surface *, GameMap *, SDL_Surface *);
 void placeTile(SDL_Surface *, int, int, int, int, SDL_Surface *);
 void place(Critter, SDL_Surface *);
 void processInputs(SDL_Event *, GameState *, RenderTarget *, Camera *);
-void gameUpdate(GameState *, Resources *, GameMap *, RenderTarget *);
+void gameUpdate(GameState *, Resources *, GameMap **, RenderTarget *);
 void render(RenderTarget *, Camera *, Resources *, GameMap *, GameState *);
 void shuffleTurnOrder(int**, int);
 void renderDirectionIcon(SDL_Surface *, Critter *, SDL_Surface *, GameState *);

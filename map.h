@@ -15,8 +15,11 @@ typedef struct GameMap {
     int **map_array;
 } GameMap;
 
-int generateMap(GameMap *);
-void generateTerrain(GameMap *);
+GameMap* initMap(int, int);
+GameMap* initRandomSizedMap();
+void generateCaveTerrain(GameMap *);
+int replaceMap(GameMap **);
+void destroyMap(GameMap *);
 int randomRange(int, int);
 void asciiOutputMap(GameMap *);
 
