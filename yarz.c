@@ -1,7 +1,7 @@
-#include "SDL.h"
-#include "SDL_image.h"
-#include "SDL_ttf.h"
-#include "cJSON.h"
+#include "SDL2/SDL.h"
+#include "SDL2/SDL_image.h"
+#include "SDL2/SDL_ttf.h"
+// #include "cJSON.h" /may be needed for later saving/loading/reading-in assets
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>

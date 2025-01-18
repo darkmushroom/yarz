@@ -1,7 +1,7 @@
 #ifndef __YARZ_H__
 #define __YARZ_H__
 
-#include "SDL.h"
+#include "SDL2/SDL.h"
 #include "map.h"
 
 typedef struct Critter {
